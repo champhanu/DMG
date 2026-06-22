@@ -43,6 +43,7 @@ Build an order management system with:
 | 12 | Flat 10% tax at checkout | Discounts module can replace later | ✅ Checkout |
 | 13 | Payment gateway stubbed via `PaymentGateway` interface | Swappable for real PSP later; no external calls now | ✅ Payment |
 | 14 | Refunds support partial and full | `PARTIALLY_REFUNDED` / `REFUNDED` statuses | ✅ Payment |
+| 15 | Order state machine enforced in `OrderStateMachine` | `CREATED → CONFIRMED → PACKED → DELIVERED`; cancel releases inventory; return triggers refund | ✅ Orders |
 
 ---
 
@@ -60,11 +61,11 @@ Development proceeds **one module at a time**. Each step = one focused commit + 
 | 5 | **Cart** | Add/update/remove items, cart persistence | ✅ Done |
 | 6 | **Checkout & Orders** | Atomic placement, payment, order APIs | ✅ Done |
 | 7 | **Payments** | Gateway, payment APIs, refunds | ✅ Done |
-| 8 | **Discounts & Tax** | Promo codes, configurable tax | 🔲 Pending |
-| 8 | **Fulfillment** | Warehouse routing, staff status updates | 🔲 Pending |
-| 9 | **Returns & Refunds** | Return requests linked to payment refunds | 🔲 Pending |
-| 10 | **Auth & RBAC** | Users, roles, secure APIs | 🔲 Pending |
-| 11 | **Tests** | Unit + integration tests for core flows | 🔲 Ongoing |
+| 8 | **Order management** | State machine, cancel, return, status APIs | ✅ Done |
+| 9 | **Discounts & Tax** | Promo codes, configurable tax | 🔲 Pending |
+| 10 | **Fulfillment** | Warehouse routing, staff workflows | 🔲 Pending |
+| 11 | **Auth & RBAC** | Users, roles, secure APIs | 🔲 Pending |
+| 12 | **Tests** | Unit + integration tests for core flows | 🔲 Ongoing |
 
 ---
 
@@ -238,7 +239,7 @@ MySQL tables `warehouses` and `inventory_items` are created automatically on fir
 2. Reserve inventory across warehouses (greedy allocation)
 3. Calculate subtotal + 10% tax
 4. Process payment (stub gateway)
-5. Create order (`CONFIRMED`) + payment record
+5. Create order (`CREATED` → `CONFIRMED` after payment) + payment record
 6. Mark cart `CHECKED_OUT`
 7. Publish async audit/notification event (non-blocking)
 
@@ -269,12 +270,51 @@ curl -X POST http://localhost:8080/api/checkout \
 
 ## Orders API
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/api/orders?customerId={id}` | List customer orders |
-| `GET` | `/api/orders/{orderId}` | Get order details |
+| Method | Endpoint | Role (intended) | Description |
+|--------|----------|-----------------|-------------|
+| `GET` | `/api/orders?customerId={id}` | Customer | List customer orders |
+| `GET` | `/api/orders/{orderId}` | Customer / Staff | Get order details (includes `allowedNextStatuses`) |
+| `PATCH` | `/api/orders/{orderId}/status` | Warehouse Staff / Admin | Advance order through fulfillment states |
+| `POST` | `/api/orders/{orderId}/cancel` | Customer | Cancel from `CREATED`, `CONFIRMED`, or `PACKED` (releases inventory) |
+| `POST` | `/api/orders/{orderId}/return` | Customer | Request return from `DELIVERED` (full refund) |
 
-Order lifecycle: `PLACED → CONFIRMED → PACKED → SHIPPED → DELIVERED → RETURNED` (fulfillment steps coming next).
+### Order lifecycle
+
+```
+CREATED → CONFIRMED → PACKED → DELIVERED → RETURNED
+   ↓          ↓          ↓
+CANCELLED  CANCELLED  CANCELLED
+```
+
+- Checkout creates the order as `CREATED`, then moves it to `CONFIRMED` after successful payment.
+- Invalid transitions return HTTP `409 Conflict`.
+- Cancel restores reserved stock to `quantityAvailable`.
+- Return issues a full refund via the payment service.
+
+### Example: fulfill and return an order
+
+```bash
+# After checkout (order id = 1, status CONFIRMED)
+curl -X PATCH http://localhost:8080/api/orders/1/status \
+  -H "Content-Type: application/json" \
+  -d '{"status":"PACKED"}'
+
+curl -X PATCH http://localhost:8080/api/orders/1/status \
+  -H "Content-Type: application/json" \
+  -d '{"status":"DELIVERED"}'
+
+curl -X POST http://localhost:8080/api/orders/1/return \
+  -H "Content-Type: application/json" \
+  -d '{"customerId":1,"reason":"Defective item"}'
+```
+
+### Example: cancel before shipment
+
+```bash
+curl -X POST http://localhost:8080/api/orders/1/cancel \
+  -H "Content-Type: application/json" \
+  -d '{"customerId":1,"reason":"Changed mind"}'
+```
 
 ---
 
@@ -316,9 +356,8 @@ curl -X POST http://localhost:8080/api/payments/1/refund \
 | Inventory | *(implemented — see Warehouse & Inventory APIs)* | Admin |
 | Cart | *(implemented — see Cart API above)* | Customer |
 | Checkout | *(implemented — see Checkout API above)* | Customer |
-| Orders | *(read APIs implemented)* | Customer |
+| Orders | *(implemented — see Orders API above)* | Customer / Staff |
 | Payments | *(implemented — see Payment API above)* | Customer / Admin |
-| Fulfillment | `PATCH /api/orders/{id}/status` | Warehouse Staff |
 | Discounts | `POST/GET /api/discounts` | Admin |
 
 ---
@@ -378,6 +417,7 @@ Hibernate `ddl-auto: update` will create and update tables automatically as enti
 | 2026-06-22 | 4 — Checkout | `feat: atomic checkout with inventory reservation, payment, and orders` |
 | 2026-06-22 | 5 — Payments | `feat: payment gateway, payment APIs, and refund processing` |
 | 2026-06-22 | 6 — Inventory | `feat: warehouse and inventory management with multi-location stock APIs` |
+| 2026-06-22 | 7 — Orders | `feat: order state machine with cancel, return, and fulfillment APIs` |
 
 ---
 
