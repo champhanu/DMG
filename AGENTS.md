@@ -31,8 +31,8 @@ This file documents how AI agents (Cursor, Claude, etc.) are used to build the D
 ## Module Build Order
 
 ```
-Skeleton → Foundation → Persistence → Auth → Catalog → Inventory
-→ Cart → Discounts/Tax → Checkout/Orders → Fulfillment → Returns
+Skeleton → Foundation → Catalog → Auth → Inventory → Cart
+→ Discounts/Tax → Checkout/Orders → Fulfillment → Returns
 → Async Pipeline → Tests (ongoing)
 ```
 
@@ -43,14 +43,11 @@ Skeleton → Foundation → Persistence → Auth → Catalog → Inventory
 | Item | Status |
 |------|--------|
 | Spring Boot app boots | ✅ |
-| README.md | ✅ Up to date |
-| AGENTS.md | ✅ This file |
-| MySQL + JPA configured | ✅ `ddl-auto: update` |
+| MySQL + JPA configured | ✅ |
+| Catalog APIs | ✅ Categories + Products |
+| Global error handling | ✅ `ApiError` + validation errors |
 | Security (permit-all stub) | ✅ Step 3 will add RBAC |
-| Actuator health endpoint | ✅ `/actuator/health` |
-| Async enabled | ✅ `@EnableAsync` |
-| REST APIs (business) | ❌ Not yet |
-| Entities / repositories | ❌ Step 2 |
+| Inventory / Cart / Orders | ❌ Not yet |
 
 ---
 
@@ -59,28 +56,37 @@ Skeleton → Foundation → Persistence → Auth → Catalog → Inventory
 | Date | Decision | Rationale |
 |------|----------|-----------|
 | 2026-06-22 | Incremental module commits | Demonstrates git workflow + clear review for evaluators |
-| 2026-06-22 | Package layout: layered (controller/service/repository/domain) | Standard Spring Boot convention, easy to navigate |
-| 2026-06-22 | Async via Spring Events + `@Async` | Non-blocking checkout without distributed complexity |
-| 2026-06-22 | MySQL for local dev, H2 for tests | User has MySQL installed; H2 keeps `mvn test` fast and password-free |
-| 2026-06-22 | Hibernate `ddl-auto: update` (no Flyway yet) | Tables auto-sync as entities are added; migrations can come later |
-| 2026-06-22 | `application-local.yml` for DB credentials | Passwords stay out of git |
+| 2026-06-22 | MySQL for local dev, H2 for tests | User has MySQL installed; H2 keeps `mvn test` fast |
+| 2026-06-22 | Hierarchical categories via `parent_id` | Multi-category catalog with root → child browsing |
+| 2026-06-22 | Soft delete (`active=false`) for catalog | Avoid breaking future order line references |
+| 2026-06-22 | Unique `slug` (category) and `sku` (product) | Prevent duplicate catalog entries |
+| 2026-06-22 | `includeInactive=true` query param for admin views | Customers see active items only by default |
 
 ---
 
-## Next Step (Step 2 — Persistence)
+## Step 2 — Catalog (completed)
 
-When user confirms, implement core entities and repositories:
+**Built:**
+- `Category`, `Product` entities + `BaseEntity`
+- `CategoryRepository`, `ProductRepository`
+- `CategoryService`, `ProductService`
+- `CategoryController`, `ProductController`
+- DTOs with Jakarta validation
+- `GlobalExceptionHandler` (404, 409, 400)
+- `CatalogIntegrationTest`, `ProductServiceTest`
 
-- `User`, `Role` (enum: ADMIN, CUSTOMER, WAREHOUSE_STAFF)
-- `Category`, `Product`
-- `Warehouse`, `InventoryItem`
-- `Cart`, `CartItem`
-- `Order`, `OrderItem`, `OrderStatus` enum
-- `Payment`, `Discount`, `ReturnRequest`
-- Base entity (`id`, `createdAt`, `updatedAt`)
-- Spring Data JPA repositories
+**MySQL tables:** `categories`, `products` (auto-created via Hibernate)
 
-Tables will be created automatically in local MySQL on first run.
+---
+
+## Next Step (Step 3 — Auth & RBAC)
+
+When user confirms:
+- `User` entity with role enum (`ADMIN`, `CUSTOMER`, `WAREHOUSE_STAFF`)
+- BCrypt password auth (basic, no OAuth)
+- Secure catalog write endpoints for `ADMIN`
+- Secure catalog read endpoints for `CUSTOMER`
+- JWT or HTTP Basic — pick simplest that meets assignment
 
 ---
 
