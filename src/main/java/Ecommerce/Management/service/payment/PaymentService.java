@@ -6,6 +6,7 @@ import Ecommerce.Management.domain.payment.PaymentMethod;
 import Ecommerce.Management.domain.payment.PaymentStatus;
 import Ecommerce.Management.dto.payment.PaymentChargeRequest;
 import Ecommerce.Management.dto.payment.PaymentGatewayResult;
+import Ecommerce.Management.dto.payment.PaymentRefundRequest;
 import Ecommerce.Management.dto.payment.PaymentResponse;
 import Ecommerce.Management.dto.payment.RefundRequest;
 import Ecommerce.Management.event.PaymentProcessedEvent;
@@ -109,6 +110,14 @@ public class PaymentService {
 		}
 
 		BigDecimal newRefundedTotal = payment.getRefundedAmount().add(refundAmount);
+		PaymentGatewayResult gatewayResult = paymentGateway.refund(new PaymentRefundRequest(
+				payment.getTransactionRef(),
+				refundAmount,
+				request.reason()));
+		if (!gatewayResult.success()) {
+			throw new PaymentFailedException(gatewayResult.failureReason());
+		}
+
 		payment.setRefundedAmount(newRefundedTotal);
 		if (newRefundedTotal.compareTo(payment.getAmount()) == 0) {
 			payment.setStatus(PaymentStatus.REFUNDED);

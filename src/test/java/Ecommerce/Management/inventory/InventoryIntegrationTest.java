@@ -64,9 +64,13 @@ class InventoryIntegrationTest {
 		stock(eastId, productId, 100);
 		stock(westId, productId, 50);
 
-		mockMvc.perform(get("/api/warehouses"))
+		mockMvc.perform(get("/api/warehouses/" + eastId))
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$", hasSize(2)));
+				.andExpect(jsonPath("$.code").value("WH-EAST"));
+
+		mockMvc.perform(get("/api/warehouses/" + westId))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.code").value("WH-WEST"));
 
 		mockMvc.perform(get("/api/inventory/product/" + productId))
 				.andExpect(status().isOk())

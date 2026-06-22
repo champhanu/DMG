@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 @Service
@@ -130,13 +131,14 @@ public class InventoryService {
 	}
 
 	public void releaseOrderReservations(Order order) {
-		for (OrderItem item : order.getItems()) {
-			releaseReservation(item.getWarehouseId(), item.getProductId(), item.getQuantity());
-		}
+		order.getItems().stream()
+				.sorted(Comparator.comparing(OrderItem::getProductId).thenComparing(OrderItem::getWarehouseId))
+				.forEach(item -> releaseReservation(item.getWarehouseId(), item.getProductId(), item.getQuantity()));
 	}
 
 	public void releaseReservation(Long warehouseId, Long productId, int quantity) {
-		InventoryItem stock = inventoryItemRepository.findByWarehouseIdAndProductId(warehouseId, productId)
+		InventoryItem stock = inventoryItemRepository
+				.findByWarehouseIdAndProductIdWithLock(warehouseId, productId)
 				.orElseThrow(() -> new ResourceNotFoundException(
 						"No inventory for product " + productId + " in warehouse " + warehouseId));
 		stock.release(quantity);

@@ -6,6 +6,7 @@ import jakarta.validation.constraints.Size;
 public record CheckoutRequest(
 		@NotNull Long customerId,
 		@Size(max = 32) String paymentMethod,
+		@Size(max = 32) String promoCode,
 		Boolean simulatePaymentFailure
 ) {
 }

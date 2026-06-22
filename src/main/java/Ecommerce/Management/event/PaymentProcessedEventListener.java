@@ -1,7 +1,6 @@
 package Ecommerce.Management.event;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import Ecommerce.Management.service.audit.AuditService;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
@@ -10,17 +9,21 @@ import org.springframework.transaction.event.TransactionalEventListener;
 @Component
 public class PaymentProcessedEventListener {
 
-	private static final Logger log = LoggerFactory.getLogger(PaymentProcessedEventListener.class);
+	private final AuditService auditService;
+
+	public PaymentProcessedEventListener(AuditService auditService) {
+		this.auditService = auditService;
+	}
 
 	@Async
 	@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
 	public void handlePaymentProcessed(PaymentProcessedEvent event) {
-		log.info("AUDIT paymentProcessed paymentId={} orderId={} customerId={} status={} ref={}",
+		auditService.record(
+				"PAYMENT_PROCESSED",
+				"PAYMENT",
 				event.paymentId(),
-				event.orderId(),
 				event.customerId(),
-				event.status(),
-				event.transactionRef());
+				"Payment " + event.status() + " for order " + event.orderId() + " ref=" + event.transactionRef());
 	}
 
 }

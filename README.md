@@ -15,7 +15,7 @@ Build an order management system with:
 - Customer cart and checkout
 - Inventory across multiple warehouses with **concurrent-safe reservation** (no overselling)
 - Payment processing
-- Order lifecycle: `CREATED → CONFIRMED → PACKED → DELIVERED` with `RETURNED` (from delivered) and `CANCELLED` (from created, confirmed, or packed)
+- Order lifecycle: `CREATED → CONFIRMED → PACKED → DELIVERED` with `RETURNED` (from delivered) and `CANCELLED` (from created or confirmed only)
 - Atomic order placement (cart + inventory + payment in one transaction)
 - Non-blocking downstream pipeline (fulfillment routing, notifications, audit logging)
 - Discounts, taxes, returns, and refunds
@@ -31,19 +31,21 @@ Build an order management system with:
 |---|------------|-----------|--------|
 | 1 | Monolithic Spring Boot app (no microservices) | Per assignment out-of-scope | ✅ Locked |
 | 2 | No UI / frontend | Per assignment out-of-scope | ✅ Locked |
-| 3 | Basic RBAC via Spring Security (no OAuth/SSO/MFA) | Per assignment scope | 🔲 Step 3 |
+| 3 | Basic RBAC via Spring Security HTTP Basic (no OAuth/SSO/MFA) | `ADMIN`, `CUSTOMER`, `WAREHOUSE_STAFF` roles; toggle via `dmg.security.enforce-rbac` | ✅ Done |
 | 4 | MySQL locally, Hibernate `ddl-auto: update` | Tables auto-created/updated on app start; no Flyway yet | ✅ Step 1 |
 | 5 | Async pipeline via Spring `@Async` + application events | Checkout publishes events after commit | ✅ Checkout |
 | 6 | Inventory reservation uses pessimistic locking | `PESSIMISTIC_WRITE` on stock rows during checkout | ✅ Checkout |
 | 7 | Hierarchical categories (parent/child) | Supports multi-category catalog browsing | ✅ Step 2 |
 | 8 | Soft delete for catalog (`active=false`) | Preserves order history integrity for future modules | ✅ Step 2 |
-| 9 | RBAC enforced on catalog APIs | Deferred to Auth step; endpoints documented by intended role | 🔲 Pending |
+| 9 | RBAC enforced on APIs | Role-based URL rules in `SecurityConfig` | ✅ Done |
 | 10 | Cart keyed by `customerId` until Auth | Placeholder until User entity + security principal in Step 3 | ✅ Cart step |
 | 11 | Unit price snapshotted on add/update | Keeps cart total stable if catalog price changes before checkout | ✅ Cart step |
-| 12 | Flat 10% tax at checkout | Discounts module can replace later | ✅ Checkout |
-| 13 | Payment gateway stubbed via `PaymentGateway` interface | Swappable for real PSP later; no external calls now | ✅ Payment |
-| 14 | Refunds support partial and full | `PARTIALLY_REFUNDED` / `REFUNDED` statuses | ✅ Payment |
-| 15 | Order state machine enforced in `OrderStateMachine` | `CREATED → CONFIRMED → PACKED → DELIVERED`; cancel releases inventory; return triggers refund | ✅ Orders |
+| 12 | Configurable tax via `TaxService` | `dmg.tax.rate` in `application.yml` (default 10%) | ✅ Done |
+| 13 | Promo codes at checkout | `DiscountService` + `promoCode` on checkout request | ✅ Done |
+| 14 | Payment gateway stubbed via `PaymentGateway` interface | `charge()` + `refund()`; swappable for real PSP | ✅ Payment |
+| 15 | Refunds support partial and full | `PARTIALLY_REFUNDED` / `REFUNDED`; cancel/return auto-refund | ✅ Payment |
+| 16 | Order state machine + optimistic locking | `@Version` on `orders`; cancel only before `PACKED` | ✅ Orders |
+| 17 | Async fulfillment routing + audit persistence | `@Async` listeners after commit; `fulfillment_tasks` + `audit_logs` tables | ✅ Done |
 
 ---
 
@@ -56,16 +58,15 @@ Development proceeds **one module at a time**. Each step = one focused commit + 
 | 0 | **Skeleton** | README, AGENTS.md, package layout, skills docs | ✅ Done |
 | 1 | **Project foundation** | JPA, Security, Validation, MySQL config, health endpoint | ✅ Done |
 | 2 | **Catalog management** | Categories, products, admin CRUD, customer browse APIs | ✅ Done |
-| 3 | **Auth & RBAC** | Users, roles (ADMIN, CUSTOMER, WAREHOUSE_STAFF), secure APIs | 🔲 Pending |
+| 3 | **Auth & RBAC** | Users, roles, HTTP Basic security | ✅ Done |
 | 4 | **Inventory & Warehouses** | Multi-warehouse stock, admin APIs, concurrent reservation | ✅ Done |
 | 5 | **Cart** | Add/update/remove items, cart persistence | ✅ Done |
 | 6 | **Checkout & Orders** | Atomic placement, payment, order APIs | ✅ Done |
 | 7 | **Payments** | Gateway, payment APIs, refunds | ✅ Done |
 | 8 | **Order management** | State machine, cancel, return, status APIs | ✅ Done |
-| 9 | **Discounts & Tax** | Promo codes, configurable tax | 🔲 Pending |
-| 10 | **Fulfillment** | Warehouse routing, staff workflows | 🔲 Pending |
-| 11 | **Auth & RBAC** | Users, roles, secure APIs | 🔲 Pending |
-| 12 | **Tests** | Unit + integration tests for core flows | 🔲 Ongoing |
+| 9 | **Discounts & Tax** | Promo codes, configurable tax rate | ✅ Done |
+| 10 | **Fulfillment** | Warehouse routing tasks, staff APIs | ✅ Done |
+| 11 | **Tests** | Unit + integration tests for core flows | 🔲 Ongoing |
 
 ---
 
@@ -275,19 +276,19 @@ curl -X POST http://localhost:8080/api/checkout \
 | `GET` | `/api/orders?customerId={id}` | Customer | List customer orders |
 | `GET` | `/api/orders/{orderId}` | Customer / Staff | Get order details (includes `allowedNextStatuses`) |
 | `PATCH` | `/api/orders/{orderId}/status` | Warehouse Staff / Admin | Advance order through fulfillment states |
-| `POST` | `/api/orders/{orderId}/cancel` | Customer | Cancel from `CREATED`, `CONFIRMED`, or `PACKED` (releases inventory) |
+| `POST` | `/api/orders/{orderId}/cancel` | Customer | Cancel from `CREATED` or `CONFIRMED` only (releases inventory + refund) |
 | `POST` | `/api/orders/{orderId}/return` | Customer | Request return from `DELIVERED` (full refund) |
 
 ### Order lifecycle
 
 ```
 CREATED → CONFIRMED → PACKED → DELIVERED → RETURNED
-   ↓          ↓          ↓
-CANCELLED  CANCELLED  CANCELLED
+   ↓          ↓
+CANCELLED  CANCELLED
 ```
 
-- Checkout creates the order as `CREATED`, then moves it to `CONFIRMED` after successful payment.
-- Invalid transitions return HTTP `409 Conflict`.
+- Cancellation is **not** allowed once the order reaches `PACKED`, `DELIVERED`, or `RETURNED`.
+- Concurrent cancel vs pack on a `CONFIRMED` order uses optimistic locking (`@Version`); the loser gets HTTP `409 Conflict`.
 - Cancel restores reserved stock to `quantityAvailable`.
 - Return issues a full refund via the payment service.
 
@@ -308,7 +309,9 @@ curl -X POST http://localhost:8080/api/orders/1/return \
   -d '{"customerId":1,"reason":"Defective item"}'
 ```
 
-### Example: cancel before shipment
+### Example: cancel before packing
+
+Only allowed while status is `CREATED` or `CONFIRMED`:
 
 ```bash
 curl -X POST http://localhost:8080/api/orders/1/cancel \
@@ -418,6 +421,7 @@ Hibernate `ddl-auto: update` will create and update tables automatically as enti
 | 2026-06-22 | 5 — Payments | `feat: payment gateway, payment APIs, and refund processing` |
 | 2026-06-22 | 6 — Inventory | `feat: warehouse and inventory management with multi-location stock APIs` |
 | 2026-06-22 | 7 — Orders | `feat: order state machine with cancel, return, and fulfillment APIs` |
+| 2026-06-22 | 8 — Platform | `feat: RBAC, discounts, tax, async audit/fulfillment, and concurrency hardening` |
 
 ---
 

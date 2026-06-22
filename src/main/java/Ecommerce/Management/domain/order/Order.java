@@ -10,6 +10,7 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -38,6 +39,12 @@ public class Order extends BaseEntity {
 	@Column(name = "tax_amount", nullable = false, precision = 12, scale = 2)
 	private BigDecimal taxAmount;
 
+	@Column(name = "discount_amount", nullable = false, precision = 12, scale = 2)
+	private BigDecimal discountAmount = BigDecimal.ZERO;
+
+	@Column(name = "promo_code", length = 32)
+	private String promoCode;
+
 	@Column(name = "total_amount", nullable = false, precision = 12, scale = 2)
 	private BigDecimal totalAmount;
 
@@ -46,6 +53,9 @@ public class Order extends BaseEntity {
 
 	@OneToOne(mappedBy = "order", cascade = CascadeType.ALL, optional = false)
 	private Payment payment;
+
+	@Version
+	private long version;
 
 	public Long getCustomerId() {
 		return customerId;
@@ -95,6 +105,22 @@ public class Order extends BaseEntity {
 		this.taxAmount = taxAmount;
 	}
 
+	public BigDecimal getDiscountAmount() {
+		return discountAmount;
+	}
+
+	public void setDiscountAmount(BigDecimal discountAmount) {
+		this.discountAmount = discountAmount;
+	}
+
+	public String getPromoCode() {
+		return promoCode;
+	}
+
+	public void setPromoCode(String promoCode) {
+		this.promoCode = promoCode;
+	}
+
 	public BigDecimal getTotalAmount() {
 		return totalAmount;
 	}
@@ -119,6 +145,10 @@ public class Order extends BaseEntity {
 	public void setPayment(Payment payment) {
 		this.payment = payment;
 		payment.setOrder(this);
+	}
+
+	public long getVersion() {
+		return version;
 	}
 
 }

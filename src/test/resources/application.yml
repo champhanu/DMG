@@ -11,6 +11,12 @@ spring:
       hibernate:
         dialect: org.hibernate.dialect.H2Dialect
 
+dmg:
+  security:
+    enforce-rbac: false
+  tax:
+    rate: 0.10
+
 management:
   endpoints:
     web:

@@ -14,6 +14,8 @@ public record CheckoutResponse(
 		PaymentStatus paymentStatus,
 		String transactionRef,
 		BigDecimal subtotal,
+		BigDecimal discountAmount,
+		String promoCode,
 		BigDecimal taxAmount,
 		BigDecimal totalAmount,
 		List<CheckoutItemResponse> items,

@@ -29,3 +29,9 @@ management:
 
 server:
   port: 8080
+
+dmg:
+  security:
+    enforce-rbac: true
+  tax:
+    rate: 0.10

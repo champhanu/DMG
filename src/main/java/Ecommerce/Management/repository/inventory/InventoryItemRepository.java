@@ -18,6 +18,15 @@ public interface InventoryItemRepository extends JpaRepository<InventoryItem, Lo
 
 	Optional<InventoryItem> findByWarehouseIdAndProductId(Long warehouseId, Long productId);
 
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	@Query("""
+			SELECT i FROM InventoryItem i
+			WHERE i.warehouse.id = :warehouseId AND i.product.id = :productId
+			""")
+	Optional<InventoryItem> findByWarehouseIdAndProductIdWithLock(
+			@Param("warehouseId") Long warehouseId,
+			@Param("productId") Long productId);
+
 	@EntityGraph(attributePaths = { "warehouse", "product" })
 	List<InventoryItem> findByWarehouseIdOrderByProduct_NameAsc(Long warehouseId);
 

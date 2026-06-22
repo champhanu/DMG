@@ -94,12 +94,41 @@ class OrderIntegrationTest {
 								""".formatted(customerId)))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.status").value("CANCELLED"))
-				.andExpect(jsonPath("$.statusReason").value("Customer requested"));
+				.andExpect(jsonPath("$.statusReason").value("Customer requested"))
+				.andExpect(jsonPath("$.paymentStatus").value("REFUNDED"));
 
 		mockMvc.perform(get("/api/inventory/product/" + productId))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.totalReserved").value(0))
 				.andExpect(jsonPath("$.totalAvailable").value(4));
+	}
+
+	@Test
+	void cancelFromPackedStateIsRejected() throws Exception {
+		long customerId = 6004L;
+		Long productId = createProduct(createCategory("order-no-cancel-packed"), "ORD-NCP-001", 35.00);
+		Long warehouseId = createWarehouse("WH-ORD-NCP");
+		stockInventory(warehouseId, productId, 3);
+		addToCart(customerId, productId, 1);
+		Long orderId = checkout(customerId);
+
+		mockMvc.perform(patch("/api/orders/" + orderId + "/status")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("""
+								{ "status": "PACKED" }
+								"""))
+				.andExpect(status().isOk());
+
+		mockMvc.perform(post("/api/orders/" + orderId + "/cancel")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("""
+								{
+								  "customerId": %d,
+								  "reason": "Too late"
+								}
+								""".formatted(customerId)))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.message").value("Order cannot be cancelled in status: PACKED"));
 	}
 
 	@Test

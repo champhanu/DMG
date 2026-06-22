@@ -15,9 +15,12 @@ import Ecommerce.Management.exception.InvalidOperationException;
 import Ecommerce.Management.exception.ResourceNotFoundException;
 import Ecommerce.Management.repository.cart.CartRepository;
 import Ecommerce.Management.repository.order.OrderRepository;
+import Ecommerce.Management.service.discount.DiscountService;
+import Ecommerce.Management.service.discount.DiscountService.AppliedDiscount;
 import Ecommerce.Management.service.inventory.InventoryService;
 import Ecommerce.Management.service.inventory.InventoryService.ReservationLine;
 import Ecommerce.Management.service.payment.PaymentService;
+import Ecommerce.Management.service.tax.TaxService;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,17 +28,18 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 @Service
 public class CheckoutService {
 
-	private static final BigDecimal TAX_RATE = new BigDecimal("0.10");
-
 	private final CartRepository cartRepository;
 	private final OrderRepository orderRepository;
 	private final InventoryService inventoryService;
 	private final PaymentService paymentService;
+	private final TaxService taxService;
+	private final DiscountService discountService;
 	private final ApplicationEventPublisher eventPublisher;
 
 	public CheckoutService(
@@ -43,15 +47,19 @@ public class CheckoutService {
 			OrderRepository orderRepository,
 			InventoryService inventoryService,
 			PaymentService paymentService,
+			TaxService taxService,
+			DiscountService discountService,
 			ApplicationEventPublisher eventPublisher) {
 		this.cartRepository = cartRepository;
 		this.orderRepository = orderRepository;
 		this.inventoryService = inventoryService;
 		this.paymentService = paymentService;
+		this.taxService = taxService;
+		this.discountService = discountService;
 		this.eventPublisher = eventPublisher;
 	}
 
-	@Transactional
+	@Transactional(rollbackFor = Exception.class)
 	public CheckoutResponse checkout(CheckoutRequest request) {
 		Cart cart = cartRepository.findByCustomerIdAndStatus(request.customerId(), CartStatus.ACTIVE)
 				.orElseThrow(() -> new ResourceNotFoundException("Cart not found for customer: " + request.customerId()));
@@ -63,7 +71,11 @@ public class CheckoutService {
 		List<OrderItem> orderItems = new ArrayList<>();
 		BigDecimal subtotal = BigDecimal.ZERO;
 
-		for (CartItem cartItem : cart.getItems()) {
+		List<CartItem> sortedItems = cart.getItems().stream()
+				.sorted(Comparator.comparing(item -> item.getProduct().getId()))
+				.toList();
+
+		for (CartItem cartItem : sortedItems) {
 			List<ReservationLine> reservations = inventoryService.reserveProduct(
 					cartItem.getProduct().getId(),
 					cartItem.getQuantity());
@@ -85,19 +97,23 @@ public class CheckoutService {
 		}
 
 		subtotal = subtotal.setScale(2, RoundingMode.HALF_UP);
-		BigDecimal taxAmount = subtotal.multiply(TAX_RATE).setScale(2, RoundingMode.HALF_UP);
-		BigDecimal totalAmount = subtotal.add(taxAmount);
+		AppliedDiscount appliedDiscount = discountService.applyPromoCode(request.promoCode(), subtotal);
+		BigDecimal discountedSubtotal = subtotal.subtract(appliedDiscount.discountAmount());
+		BigDecimal taxAmount = taxService.calculateTax(discountedSubtotal);
+		BigDecimal totalAmount = discountedSubtotal.add(taxAmount);
 
 		Order order = new Order();
 		order.setCustomerId(request.customerId());
 		order.setCartId(cart.getId());
 		order.setStatus(OrderStatus.CREATED);
 		order.setSubtotal(subtotal);
+		order.setDiscountAmount(appliedDiscount.discountAmount());
+		order.setPromoCode(appliedDiscount.promoCode());
 		order.setTaxAmount(taxAmount);
 		order.setTotalAmount(totalAmount);
 		orderItems.forEach(order::addItem);
 
-		Payment payment = paymentService.processPaymentForOrder(
+		paymentService.processPaymentForOrder(
 				order,
 				request.paymentMethod(),
 				Boolean.TRUE.equals(request.simulatePaymentFailure()));
@@ -106,6 +122,7 @@ public class CheckoutService {
 
 		Order savedOrder = orderRepository.save(order);
 		cart.setStatus(CartStatus.CHECKED_OUT);
+		cartRepository.save(cart);
 
 		paymentService.publishPaymentProcessed(savedOrder.getPayment());
 		eventPublisher.publishEvent(new OrderPlacedEvent(savedOrder.getId(), savedOrder.getCustomerId()));
@@ -132,6 +149,8 @@ public class CheckoutService {
 				order.getPayment().getStatus(),
 				order.getPayment().getTransactionRef(),
 				order.getSubtotal(),
+				order.getDiscountAmount(),
+				order.getPromoCode(),
 				order.getTaxAmount(),
 				order.getTotalAmount(),
 				items,

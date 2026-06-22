@@ -1,7 +1,9 @@
 package Ecommerce.Management.exception;
 
 import Ecommerce.Management.dto.common.ApiError;
+import jakarta.persistence.OptimisticLockException;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
@@ -25,6 +27,14 @@ public class GlobalExceptionHandler {
 	public ResponseEntity<ApiError> handlePaymentFailed(PaymentFailedException ex, HttpServletRequest request) {
 		return ResponseEntity.status(HttpStatus.PAYMENT_REQUIRED)
 				.body(ApiError.of(402, "Payment Required", ex.getMessage(), request.getRequestURI()));
+	}
+
+	@ExceptionHandler({ OptimisticLockingFailureException.class, OptimisticLockException.class })
+	public ResponseEntity<ApiError> handleOptimisticLock(Exception ex, HttpServletRequest request) {
+		return ResponseEntity.status(HttpStatus.CONFLICT)
+				.body(ApiError.of(409, "Conflict",
+						"Order was modified by another operation. Please refresh and retry.",
+						request.getRequestURI()));
 	}
 
 	@ExceptionHandler(InvalidOrderStateTransitionException.class)

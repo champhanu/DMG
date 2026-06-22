@@ -17,10 +17,12 @@ import Ecommerce.Management.service.payment.PaymentService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Set;
 
 @Service
+@Transactional
 public class OrderService {
 
 	private final OrderRepository orderRepository;
@@ -58,12 +60,13 @@ public class OrderService {
 		Order order = findOrder(orderId);
 		assertCustomer(order, request.customerId());
 
-		if (!Set.of(OrderStatus.CREATED, OrderStatus.CONFIRMED, OrderStatus.PACKED).contains(order.getStatus())) {
+		if (!Set.of(OrderStatus.CREATED, OrderStatus.CONFIRMED).contains(order.getStatus())) {
 			throw new InvalidOperationException("Order cannot be cancelled in status: " + order.getStatus());
 		}
 
 		transition(order, OrderStatus.CANCELLED, request.reason());
 		inventoryService.releaseOrderReservations(order);
+		refundIfPaid(order, request.reason());
 		return toResponse(order);
 	}
 
@@ -76,12 +79,8 @@ public class OrderService {
 		}
 
 		transition(order, OrderStatus.RETURNED, request.reason());
-
-		if (order.getPayment().getStatus() == PaymentStatus.SUCCESS) {
-			paymentService.refundPayment(
-					order.getPayment().getId(),
-					new RefundRequest(order.getTotalAmount(), request.reason()));
-		}
+		inventoryService.releaseOrderReservations(order);
+		refundIfPaid(order, request.reason());
 		return toResponse(order);
 	}
 
@@ -90,6 +89,16 @@ public class OrderService {
 		order.setStatus(targetStatus);
 		if (reason != null && !reason.isBlank()) {
 			order.setStatusReason(reason);
+		}
+	}
+
+	private void refundIfPaid(Order order, String reason) {
+		PaymentStatus status = order.getPayment().getStatus();
+		if (status == PaymentStatus.SUCCESS || status == PaymentStatus.PARTIALLY_REFUNDED) {
+			BigDecimal remaining = order.getTotalAmount().subtract(order.getPayment().getRefundedAmount());
+			if (remaining.signum() > 0) {
+				paymentService.refundPayment(order.getPayment().getId(), new RefundRequest(remaining, reason));
+			}
 		}
 	}
 
@@ -127,6 +136,8 @@ public class OrderService {
 				order.getPayment().getStatus(),
 				order.getPayment().getTransactionRef(),
 				order.getSubtotal(),
+				order.getDiscountAmount(),
+				order.getPromoCode(),
 				order.getTaxAmount(),
 				order.getTotalAmount(),
 				items,

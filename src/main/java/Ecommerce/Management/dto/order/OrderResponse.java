@@ -18,6 +18,8 @@ public record OrderResponse(
 		PaymentStatus paymentStatus,
 		String transactionRef,
 		BigDecimal subtotal,
+		BigDecimal discountAmount,
+		String promoCode,
 		BigDecimal taxAmount,
 		BigDecimal totalAmount,
 		List<OrderItemResponse> items,

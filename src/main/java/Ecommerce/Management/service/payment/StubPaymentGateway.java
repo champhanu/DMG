@@ -2,6 +2,7 @@ package Ecommerce.Management.service.payment;
 
 import Ecommerce.Management.dto.payment.PaymentChargeRequest;
 import Ecommerce.Management.dto.payment.PaymentGatewayResult;
+import Ecommerce.Management.dto.payment.PaymentRefundRequest;
 import org.springframework.stereotype.Component;
 
 import java.util.UUID;
@@ -18,6 +19,17 @@ public class StubPaymentGateway implements PaymentGateway {
 			return PaymentGatewayResult.failure("Invalid payment amount");
 		}
 		return PaymentGatewayResult.success("TXN-" + UUID.randomUUID());
+	}
+
+	@Override
+	public PaymentGatewayResult refund(PaymentRefundRequest request) {
+		if (request.transactionRef() == null || request.transactionRef().isBlank()) {
+			return PaymentGatewayResult.failure("Missing transaction reference for refund");
+		}
+		if (request.amount() == null || request.amount().signum() <= 0) {
+			return PaymentGatewayResult.failure("Invalid refund amount");
+		}
+		return PaymentGatewayResult.success("RFND-" + UUID.randomUUID());
 	}
 
 }
