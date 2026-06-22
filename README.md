@@ -33,13 +33,15 @@ Build an order management system with:
 | 2 | No UI / frontend | Per assignment out-of-scope | ✅ Locked |
 | 3 | Basic RBAC via Spring Security (no OAuth/SSO/MFA) | Per assignment scope | 🔲 Step 3 |
 | 4 | MySQL locally, Hibernate `ddl-auto: update` | Tables auto-created/updated on app start; no Flyway yet | ✅ Step 1 |
-| 5 | Async pipeline via Spring `@Async` + application events | Avoids blocking checkout without distributed infra | 🔲 Step 8 |
-| 6 | Inventory reservation uses pessimistic locking / DB constraints | Prevents overselling under concurrency | 🔲 Step 5 |
+| 5 | Async pipeline via Spring `@Async` + application events | Checkout publishes events after commit | ✅ Checkout |
+| 6 | Inventory reservation uses pessimistic locking | `PESSIMISTIC_WRITE` on stock rows during checkout | ✅ Checkout |
 | 7 | Hierarchical categories (parent/child) | Supports multi-category catalog browsing | ✅ Step 2 |
 | 8 | Soft delete for catalog (`active=false`) | Preserves order history integrity for future modules | ✅ Step 2 |
 | 9 | RBAC enforced on catalog APIs | Deferred to Auth step; endpoints documented by intended role | 🔲 Pending |
 | 10 | Cart keyed by `customerId` until Auth | Placeholder until User entity + security principal in Step 3 | ✅ Cart step |
 | 11 | Unit price snapshotted on add/update | Keeps cart total stable if catalog price changes before checkout | ✅ Cart step |
+| 12 | Flat 10% tax at checkout | Discounts module can replace later | ✅ Checkout |
+| 13 | Payment gateway stubbed | Simulates success/failure; no external PSP | ✅ Checkout |
 
 ---
 
@@ -53,13 +55,13 @@ Development proceeds **one module at a time**. Each step = one focused commit + 
 | 1 | **Project foundation** | JPA, Security, Validation, MySQL config, health endpoint | ✅ Done |
 | 2 | **Catalog management** | Categories, products, admin CRUD, customer browse APIs | ✅ Done |
 | 3 | **Auth & RBAC** | Users, roles (ADMIN, CUSTOMER, WAREHOUSE_STAFF), secure APIs | 🔲 Pending |
-| 4 | **Inventory** | Warehouses, stock levels, concurrent reservation | 🔲 Pending |
+| 4 | **Inventory** | Warehouses, stock levels, concurrent reservation | ✅ Done (with checkout) |
 | 5 | **Cart** | Add/update/remove items, cart persistence | ✅ Done |
-| 6 | **Discounts & Tax** | Promo codes, order-level tax calculation | 🔲 Pending |
-| 7 | **Checkout & Orders** | Atomic placement, payment stub, order state machine | 🔲 Pending |
+| 6 | **Checkout & Orders** | Atomic placement, payment, order APIs | ✅ Done |
+| 7 | **Discounts & Tax** | Promo codes, configurable tax | 🔲 Pending |
 | 8 | **Fulfillment** | Warehouse routing, staff status updates | 🔲 Pending |
 | 9 | **Returns & Refunds** | Return requests, refund processing | 🔲 Pending |
-| 10 | **Async pipeline** | Events: notifications, audit log, fulfillment routing | 🔲 Pending |
+| 10 | **Auth & RBAC** | Users, roles, secure APIs | 🔲 Pending |
 | 11 | **Tests** | Unit + integration tests for core flows | 🔲 Ongoing |
 
 ---
@@ -173,14 +175,81 @@ MySQL tables `carts` and `cart_items` are created automatically on first app sta
 
 ---
 
+MySQL tables `carts` and `cart_items` are created automatically on first app start.
+
+---
+
+## Inventory API (admin)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/warehouses` | Create warehouse |
+| `POST` | `/api/inventory` | Add stock for a product in a warehouse |
+
+Stock must exist before checkout. Inventory is reserved with pessimistic locking during checkout.
+
+---
+
+## Checkout API
+
+| Method | Endpoint | Role (intended) | Description |
+|--------|----------|-----------------|-------------|
+| `POST` | `/api/checkout` | Customer | Atomically reserve stock, charge payment, create order |
+
+### Checkout flow (single transaction)
+
+1. Load active cart
+2. Reserve inventory across warehouses (greedy allocation)
+3. Calculate subtotal + 10% tax
+4. Process payment (stub gateway)
+5. Create order (`CONFIRMED`) + payment record
+6. Mark cart `CHECKED_OUT`
+7. Publish async audit/notification event (non-blocking)
+
+### Example: full checkout flow
+
+```bash
+# 1. Stock the warehouse
+curl -X POST http://localhost:8080/api/warehouses \
+  -H "Content-Type: application/json" \
+  -d '{"name":"East DC","code":"WH-EAST","location":"NYC"}'
+
+curl -X POST http://localhost:8080/api/inventory \
+  -H "Content-Type: application/json" \
+  -d '{"warehouseId":1,"productId":1,"quantity":50}'
+
+# 2. Add to cart
+curl -X POST http://localhost:8080/api/cart/items \
+  -H "Content-Type: application/json" \
+  -d '{"customerId":1,"productId":1,"quantity":2}'
+
+# 3. Checkout
+curl -X POST http://localhost:8080/api/checkout \
+  -H "Content-Type: application/json" \
+  -d '{"customerId":1,"paymentMethod":"CARD"}'
+```
+
+---
+
+## Orders API
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/orders?customerId={id}` | List customer orders |
+| `GET` | `/api/orders/{orderId}` | Get order details |
+
+Order lifecycle: `PLACED → CONFIRMED → PACKED → SHIPPED → DELIVERED → RETURNED` (fulfillment steps coming next).
+
+---
+
 ## API Surface (planned — remaining modules)
 
 | Area | Endpoints (draft) | Role |
 |------|-------------------|------|
-| Inventory | `GET/POST /api/warehouses`, `/api/inventory` | Admin |
+| Inventory | *(implemented — see Inventory API above)* | Admin |
 | Cart | *(implemented — see Cart API above)* | Customer |
-| Checkout | `POST /api/checkout` | Customer |
-| Orders | `GET /api/orders`, `POST /api/orders/{id}/return` | Customer |
+| Checkout | *(implemented — see Checkout API above)* | Customer |
+| Orders | *(read APIs implemented)* | Customer |
 | Fulfillment | `PATCH /api/orders/{id}/status` | Warehouse Staff |
 | Discounts | `POST/GET /api/discounts` | Admin |
 
@@ -238,6 +307,7 @@ Hibernate `ddl-auto: update` will create and update tables automatically as enti
 | 2026-06-22 | 1 — Foundation | `feat: project foundation with MySQL, JPA, security, and health endpoint` |
 | 2026-06-22 | 2 — Catalog | `feat: catalog management with categories, products, and REST APIs` |
 | 2026-06-22 | 3 — Cart | `feat: customer cart with add, update, remove, and persistence` |
+| 2026-06-22 | 4 — Checkout | `feat: atomic checkout with inventory reservation, payment, and orders` |
 
 ---
 

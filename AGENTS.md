@@ -1,30 +1,6 @@
 # AGENTS.md — AI-Assisted Development Guide
 
-This file documents how AI agents (Cursor, Claude, etc.) are used to build the DMG e-commerce order management system.  
-**Keep this file updated after every module.**
-
----
-
-## Project Context
-
-- **Name:** DMG (E-commerce Order Management)
-- **Goal:** Hiring assignment — feature-rich Spring Boot REST API
-- **Approach:** Incremental modules, one commit per step, README updated each time
-- **Main class:** `Ecommerce.Management.main`
-- **Package root:** `Ecommerce.Management`
-- **Database:** MySQL locally (`dmg` schema), H2 in-memory for tests
-
----
-
-## Development Rules for Agents
-
-1. **One module per step** — do not jump ahead; wait for user confirmation before the next module.
-2. **Update README.md** after each module: assumptions table, roadmap status, dev log.
-3. **Update this file** after each module: what was built, decisions made, next step.
-4. **Minimal diffs** — match existing code style; no over-engineering.
-5. **Test core flows** — unit + integration tests required for each module before marking done.
-6. **Document assumptions** in README when making scoping choices.
-7. **No UI, no Docker, no microservices** — per assignment constraints.
+**Current step:** Checkout complete — next: Fulfillment, Auth, or Discounts
 
 ---
 
@@ -32,11 +8,30 @@ This file documents how AI agents (Cursor, Claude, etc.) are used to build the D
 
 | Item | Status |
 |------|--------|
-| Catalog APIs | ✅ Categories + Products |
-| Cart APIs | ✅ Add / update / remove / clear |
-| Global error handling | ✅ |
-| Security (permit-all stub) | ✅ Auth step will add RBAC |
-| Inventory / Checkout / Orders | ❌ Not yet |
+| Catalog APIs | ✅ |
+| Cart APIs | ✅ |
+| Inventory + reservation | ✅ |
+| Checkout (atomic) | ✅ |
+| Order read APIs | ✅ |
+| Async audit/notification on checkout | ✅ |
+| Fulfillment status updates | ❌ |
+| Auth / RBAC | ❌ |
+
+---
+
+## Step — Checkout (completed)
+
+**Built:**
+- `Warehouse`, `InventoryItem` with optimistic `@Version`
+- `Order`, `OrderItem`, `Payment` entities
+- Pessimistic inventory reservation across warehouses
+- `CheckoutService` — single `@Transactional` checkout
+- `POST /api/checkout`, `GET /api/orders`
+- `POST /api/warehouses`, `POST /api/inventory` (admin stocking)
+- `OrderPlacedEvent` + `@Async` listener (audit + notification logs)
+- `CheckoutIntegrationTest` (success, insufficient stock, payment rollback)
+
+**Tables:** `warehouses`, `inventory_items`, `orders`, `order_items`, `payments`
 
 ---
 
@@ -44,37 +39,17 @@ This file documents how AI agents (Cursor, Claude, etc.) are used to build the D
 
 | Date | Decision | Rationale |
 |------|----------|-----------|
-| 2026-06-22 | MySQL for local dev, H2 for tests | User has MySQL installed; H2 keeps `mvn test` fast |
-| 2026-06-22 | Hierarchical categories via `parent_id` | Multi-category catalog browsing |
-| 2026-06-22 | Soft delete for catalog | Preserve future order references |
-| 2026-06-22 | `customerId` query/body param for cart | Auth not built yet; replaced by principal in Auth step |
-| 2026-06-22 | One ACTIVE cart per customer (app-enforced) | Checkout will flip status to CHECKED_OUT |
-| 2026-06-22 | Price snapshot on cart lines | Stable subtotal before checkout |
-| 2026-06-22 | Merge duplicate product lines on add | Standard cart UX |
+| 2026-06-22 | Greedy multi-warehouse allocation | Fulfills from highest-stock warehouse first |
+| 2026-06-22 | 10% flat tax at checkout | Placeholder until discounts/tax module |
+| 2026-06-22 | Payment stub with `simulatePaymentFailure` | Test rollback without external gateway |
+| 2026-06-22 | `@TransactionalEventListener(AFTER_COMMIT)` | Non-blocking pipeline without blocking checkout response |
 
 ---
 
-## Step 3 — Cart (completed)
+## Next Step
 
-**Built:**
-- `Cart`, `CartItem`, `CartStatus` entities
-- `CartRepository`, `CartItemRepository`
-- `CartService`, `CartController`
-- DTOs with validation
-- `CartIntegrationTest`, `CartServiceTest`
+- **Fulfillment:** `PATCH /api/orders/{id}/status` for warehouse staff
+- **Auth:** secure admin/customer endpoints
+- **Discounts:** replace flat tax, promo codes
 
-**MySQL tables:** `carts`, `cart_items`
-
----
-
-## Next Step (Auth & RBAC or Inventory)
-
-User may choose next module:
-- **Auth:** `User` entity, roles, secure endpoints
-- **Inventory:** warehouses, stock, concurrent reservation
-
----
-
-## Skills Used
-
-See [`skills/SKILLS.md`](skills/SKILLS.md) for the full list of Cursor/agent skills referenced during development.
+See [`skills/SKILLS.md`](skills/SKILLS.md).

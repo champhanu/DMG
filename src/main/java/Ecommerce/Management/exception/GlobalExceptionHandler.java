@@ -14,6 +14,13 @@ import java.util.List;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+	@ExceptionHandler(InsufficientInventoryException.class)
+	public ResponseEntity<ApiError> handleInsufficientInventory(
+			InsufficientInventoryException ex, HttpServletRequest request) {
+		return ResponseEntity.status(HttpStatus.CONFLICT)
+				.body(ApiError.of(409, "Conflict", ex.getMessage(), request.getRequestURI()));
+	}
+
 	@ExceptionHandler(ResourceNotFoundException.class)
 	public ResponseEntity<ApiError> handleNotFound(ResourceNotFoundException ex, HttpServletRequest request) {
 		return ResponseEntity.status(HttpStatus.NOT_FOUND)

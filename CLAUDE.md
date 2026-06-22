@@ -7,7 +7,7 @@
 - **Project:** DMG — E-commerce Order Management (Spring Boot hiring assignment)
 - **Repo:** https://github.com/champhanu/DMG
 - **Workflow:** One module per step → commit → push → update README + AGENTS.md
-- **Current step:** Cart complete — next: Auth & RBAC or Inventory
+- **Current step:** Checkout complete — next: Fulfillment, Auth, or Discounts
 
 ## Before Writing Code
 
