@@ -28,26 +28,15 @@ This file documents how AI agents (Cursor, Claude, etc.) are used to build the D
 
 ---
 
-## Module Build Order
-
-```
-Skeleton → Foundation → Catalog → Auth → Inventory → Cart
-→ Discounts/Tax → Checkout/Orders → Fulfillment → Returns
-→ Async Pipeline → Tests (ongoing)
-```
-
----
-
 ## Current State
 
 | Item | Status |
 |------|--------|
-| Spring Boot app boots | ✅ |
-| MySQL + JPA configured | ✅ |
 | Catalog APIs | ✅ Categories + Products |
-| Global error handling | ✅ `ApiError` + validation errors |
-| Security (permit-all stub) | ✅ Step 3 will add RBAC |
-| Inventory / Cart / Orders | ❌ Not yet |
+| Cart APIs | ✅ Add / update / remove / clear |
+| Global error handling | ✅ |
+| Security (permit-all stub) | ✅ Auth step will add RBAC |
+| Inventory / Checkout / Orders | ❌ Not yet |
 
 ---
 
@@ -55,38 +44,34 @@ Skeleton → Foundation → Catalog → Auth → Inventory → Cart
 
 | Date | Decision | Rationale |
 |------|----------|-----------|
-| 2026-06-22 | Incremental module commits | Demonstrates git workflow + clear review for evaluators |
 | 2026-06-22 | MySQL for local dev, H2 for tests | User has MySQL installed; H2 keeps `mvn test` fast |
-| 2026-06-22 | Hierarchical categories via `parent_id` | Multi-category catalog with root → child browsing |
-| 2026-06-22 | Soft delete (`active=false`) for catalog | Avoid breaking future order line references |
-| 2026-06-22 | Unique `slug` (category) and `sku` (product) | Prevent duplicate catalog entries |
-| 2026-06-22 | `includeInactive=true` query param for admin views | Customers see active items only by default |
+| 2026-06-22 | Hierarchical categories via `parent_id` | Multi-category catalog browsing |
+| 2026-06-22 | Soft delete for catalog | Preserve future order references |
+| 2026-06-22 | `customerId` query/body param for cart | Auth not built yet; replaced by principal in Auth step |
+| 2026-06-22 | One ACTIVE cart per customer (app-enforced) | Checkout will flip status to CHECKED_OUT |
+| 2026-06-22 | Price snapshot on cart lines | Stable subtotal before checkout |
+| 2026-06-22 | Merge duplicate product lines on add | Standard cart UX |
 
 ---
 
-## Step 2 — Catalog (completed)
+## Step 3 — Cart (completed)
 
 **Built:**
-- `Category`, `Product` entities + `BaseEntity`
-- `CategoryRepository`, `ProductRepository`
-- `CategoryService`, `ProductService`
-- `CategoryController`, `ProductController`
-- DTOs with Jakarta validation
-- `GlobalExceptionHandler` (404, 409, 400)
-- `CatalogIntegrationTest`, `ProductServiceTest`
+- `Cart`, `CartItem`, `CartStatus` entities
+- `CartRepository`, `CartItemRepository`
+- `CartService`, `CartController`
+- DTOs with validation
+- `CartIntegrationTest`, `CartServiceTest`
 
-**MySQL tables:** `categories`, `products` (auto-created via Hibernate)
+**MySQL tables:** `carts`, `cart_items`
 
 ---
 
-## Next Step (Step 3 — Auth & RBAC)
+## Next Step (Auth & RBAC or Inventory)
 
-When user confirms:
-- `User` entity with role enum (`ADMIN`, `CUSTOMER`, `WAREHOUSE_STAFF`)
-- BCrypt password auth (basic, no OAuth)
-- Secure catalog write endpoints for `ADMIN`
-- Secure catalog read endpoints for `CUSTOMER`
-- JWT or HTTP Basic — pick simplest that meets assignment
+User may choose next module:
+- **Auth:** `User` entity, roles, secure endpoints
+- **Inventory:** warehouses, stock, concurrent reservation
 
 ---
 

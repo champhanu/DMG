@@ -37,7 +37,9 @@ Build an order management system with:
 | 6 | Inventory reservation uses pessimistic locking / DB constraints | Prevents overselling under concurrency | 🔲 Step 5 |
 | 7 | Hierarchical categories (parent/child) | Supports multi-category catalog browsing | ✅ Step 2 |
 | 8 | Soft delete for catalog (`active=false`) | Preserves order history integrity for future modules | ✅ Step 2 |
-| 9 | RBAC enforced on catalog APIs | Deferred to Step 3; endpoints documented by intended role | 🔲 Step 3 |
+| 9 | RBAC enforced on catalog APIs | Deferred to Auth step; endpoints documented by intended role | 🔲 Pending |
+| 10 | Cart keyed by `customerId` until Auth | Placeholder until User entity + security principal in Step 3 | ✅ Cart step |
+| 11 | Unit price snapshotted on add/update | Keeps cart total stable if catalog price changes before checkout | ✅ Cart step |
 
 ---
 
@@ -52,7 +54,7 @@ Development proceeds **one module at a time**. Each step = one focused commit + 
 | 2 | **Catalog management** | Categories, products, admin CRUD, customer browse APIs | ✅ Done |
 | 3 | **Auth & RBAC** | Users, roles (ADMIN, CUSTOMER, WAREHOUSE_STAFF), secure APIs | 🔲 Pending |
 | 4 | **Inventory** | Warehouses, stock levels, concurrent reservation | 🔲 Pending |
-| 5 | **Cart** | Add/update/remove items, cart persistence | 🔲 Pending |
+| 5 | **Cart** | Add/update/remove items, cart persistence | ✅ Done |
 | 6 | **Discounts & Tax** | Promo codes, order-level tax calculation | 🔲 Pending |
 | 7 | **Checkout & Orders** | Atomic placement, payment stub, order state machine | 🔲 Pending |
 | 8 | **Fulfillment** | Warehouse routing, staff status updates | 🔲 Pending |
@@ -127,12 +129,56 @@ MySQL tables `categories` and `products` are created automatically on first app 
 
 ---
 
+## Cart API
+
+Base path: `http://localhost:8080`
+
+| Method | Endpoint | Role (intended) | Description |
+|--------|----------|-----------------|-------------|
+| `GET` | `/api/cart?customerId={id}` | Customer | Get active cart (404 if none) |
+| `POST` | `/api/cart/items` | Customer | Add one product with quantity |
+| `POST` | `/api/cart/items/bulk` | Customer | Add multiple products with quantities in one request |
+| `PUT` | `/api/cart/items/{itemId}` | Customer | Update item quantity |
+| `DELETE` | `/api/cart/items/{itemId}` | Customer | Remove line item |
+| `DELETE` | `/api/cart?customerId={id}` | Customer | Clear all items |
+
+`customerId` is a placeholder until Auth is implemented (Step 3).
+
+### Example: add to cart
+
+```bash
+curl -X POST http://localhost:8080/api/cart/items \
+  -H "Content-Type: application/json" \
+  -d '{"customerId":1,"productId":1,"quantity":2}'
+```
+
+Response includes `items` (one line per product), `lineCount` (distinct products), `totalItems` (sum of quantities), and `subtotal`. Each line includes `categoryId` and `categoryName` so items from different catalog categories are visible. Adding the same product again merges quantities.
+
+### Example: add multiple catalog products at once
+
+```bash
+curl -X POST http://localhost:8080/api/cart/items/bulk \
+  -H "Content-Type: application/json" \
+  -d '{
+    "customerId": 1,
+    "items": [
+      { "productId": 1, "quantity": 2 },
+      { "productId": 2, "quantity": 1 },
+      { "productId": 5, "quantity": 3 }
+    ]
+  }'
+```
+
+MySQL tables `carts` and `cart_items` are created automatically on first app start.
+
+---
+
 ## API Surface (planned — remaining modules)
 
 | Area | Endpoints (draft) | Role |
 |------|-------------------|------|
 | Inventory | `GET/POST /api/warehouses`, `/api/inventory` | Admin |
-| Cart | `GET/POST/PUT/DELETE /api/cart` | Customer |
+| Cart | *(implemented — see Cart API above)* | Customer |
 | Checkout | `POST /api/checkout` | Customer |
 | Orders | `GET /api/orders`, `POST /api/orders/{id}/return` | Customer |
 | Fulfillment | `PATCH /api/orders/{id}/status` | Warehouse Staff |
@@ -191,6 +237,7 @@ Hibernate `ddl-auto: update` will create and update tables automatically as enti
 | 2026-06-22 | 0 — Skeleton | `docs: project skeleton with README, AGENTS.md, and module roadmap` |
 | 2026-06-22 | 1 — Foundation | `feat: project foundation with MySQL, JPA, security, and health endpoint` |
 | 2026-06-22 | 2 — Catalog | `feat: catalog management with categories, products, and REST APIs` |
+| 2026-06-22 | 3 — Cart | `feat: customer cart with add, update, remove, and persistence` |
 
 ---
 
