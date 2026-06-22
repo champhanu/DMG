@@ -1,4 +1,4 @@
-package Ecommerce.Management.checkout;
+package Ecommerce.Management.payment;
 
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.Test;
@@ -10,7 +10,6 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.annotation.Transactional;
 
-import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasSize;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -20,18 +19,18 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @Transactional
-class CheckoutIntegrationTest {
+class PaymentIntegrationTest {
 
 	@Autowired
 	private MockMvc mockMvc;
 
 	@Test
-	void checkoutAtomicallyReservesInventoryProcessesPaymentAndCreatesOrder() throws Exception {
-		long customerId = 5001L;
-		Long categoryId = createCategory("checkout-cat");
-		Long productId = createProduct(categoryId, "CHK-PROD-001", 100.00);
-		Long warehouseId = createWarehouse("WH-EAST");
-		stockInventory(warehouseId, productId, 10);
+	void customerCanViewPaymentsAndProcessRefund() throws Exception {
+		long customerId = 6001L;
+		Long categoryId = createCategory();
+		Long productId = createProduct(categoryId, "PAY-PROD-001", 50.00);
+		Long warehouseId = createWarehouse();
+		stockInventory(warehouseId, productId, 5);
 
 		mockMvc.perform(post("/api/cart/items")
 						.contentType(MediaType.APPLICATION_JSON)
@@ -39,7 +38,7 @@ class CheckoutIntegrationTest {
 								{
 								  "customerId": %d,
 								  "productId": %d,
-								  "quantity": 2
+								  "quantity": 1
 								}
 								""".formatted(customerId, productId)))
 				.andExpect(status().isOk());
@@ -49,73 +48,62 @@ class CheckoutIntegrationTest {
 						.content("""
 								{
 								  "customerId": %d,
-								  "paymentMethod": "CARD"
+								  "paymentMethod": "UPI"
 								}
 								""".formatted(customerId)))
 				.andExpect(status().isCreated())
-				.andExpect(jsonPath("$.status").value("CONFIRMED"))
-				.andExpect(jsonPath("$.paymentStatus").value("SUCCESS"))
-				.andExpect(jsonPath("$.subtotal").value(200.00))
-				.andExpect(jsonPath("$.taxAmount").value(20.00))
-				.andExpect(jsonPath("$.totalAmount").value(220.00))
-				.andExpect(jsonPath("$.items", hasSize(1)))
 				.andReturn();
 
 		Long orderId = JsonPath.parse(checkoutResult.getResponse().getContentAsString())
 				.read("$.orderId", Long.class);
 
-		mockMvc.perform(get("/api/cart").param("customerId", String.valueOf(customerId)))
-				.andExpect(status().isNotFound());
+		MvcResult paymentResult = mockMvc.perform(get("/api/payments/order/" + orderId))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.status").value("SUCCESS"))
+				.andExpect(jsonPath("$.paymentMethod").value("UPI"))
+				.andExpect(jsonPath("$.amount").value(55.00))
+				.andReturn();
 
-		mockMvc.perform(get("/api/orders").param("customerId", String.valueOf(customerId)))
+		Long paymentId = JsonPath.parse(paymentResult.getResponse().getContentAsString())
+				.read("$.id", Long.class);
+
+		mockMvc.perform(get("/api/payments").param("customerId", String.valueOf(customerId)))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$", hasSize(1)))
-				.andExpect(jsonPath("$[0].id").value(orderId))
-				.andExpect(jsonPath("$[0].status").value("CONFIRMED"));
+				.andExpect(jsonPath("$[0].transactionRef").exists());
 
-		mockMvc.perform(get("/api/orders/" + orderId))
+		mockMvc.perform(post("/api/payments/" + paymentId + "/refund")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("""
+								{
+								  "amount": 25.00,
+								  "reason": "Partial return"
+								}
+								"""))
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.cartId").exists())
-				.andExpect(jsonPath("$.items[0].warehouseId").value(warehouseId));
-	}
+				.andExpect(jsonPath("$.status").value("PARTIALLY_REFUNDED"))
+				.andExpect(jsonPath("$.refundedAmount").value(25.00));
 
-	@Test
-	void checkoutFailsWhenInventoryInsufficient() throws Exception {
-		long customerId = 5002L;
-		Long categoryId = createCategory("checkout-low-stock");
-		Long productId = createProduct(categoryId, "CHK-LOW-001", 50.00);
-		Long warehouseId = createWarehouse("WH-WEST");
-		stockInventory(warehouseId, productId, 1);
-
-		mockMvc.perform(post("/api/cart/items")
+		mockMvc.perform(post("/api/payments/" + paymentId + "/refund")
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("""
 								{
-								  "customerId": %d,
-								  "productId": %d,
-								  "quantity": 3
+								  "amount": 30.00,
+								  "reason": "Remaining refund"
 								}
-								""".formatted(customerId, productId)))
-				.andExpect(status().isOk());
-
-		mockMvc.perform(post("/api/checkout")
-						.contentType(MediaType.APPLICATION_JSON)
-						.content("""
-								{
-								  "customerId": %d
-								}
-								""".formatted(customerId)))
-				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.message", containsString("Insufficient inventory")));
+								"""))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.status").value("REFUNDED"))
+				.andExpect(jsonPath("$.refundedAmount").value(55.00));
 	}
 
 	@Test
-	void paymentFailureRollsBackCheckout() throws Exception {
-		long customerId = 5003L;
-		Long categoryId = createCategory("checkout-pay-fail");
-		Long productId = createProduct(categoryId, "CHK-PAY-001", 25.00);
-		Long warehouseId = createWarehouse("WH-NORTH");
-		stockInventory(warehouseId, productId, 5);
+	void rejectsUnsupportedPaymentMethodAtCheckout() throws Exception {
+		long customerId = 6002L;
+		Long categoryId = createCategory();
+		Long productId = createProduct(categoryId, "PAY-BAD-001", 10.00);
+		Long warehouseId = createWarehouse();
+		stockInventory(warehouseId, productId, 2);
 
 		mockMvc.perform(post("/api/cart/items")
 						.contentType(MediaType.APPLICATION_JSON)
@@ -133,26 +121,22 @@ class CheckoutIntegrationTest {
 						.content("""
 								{
 								  "customerId": %d,
-								  "simulatePaymentFailure": true
+								  "paymentMethod": "BITCOIN"
 								}
 								""".formatted(customerId)))
-				.andExpect(status().isPaymentRequired())
-				.andExpect(jsonPath("$.message").value("Payment declined by gateway"));
-
-		mockMvc.perform(get("/api/cart").param("customerId", String.valueOf(customerId)))
-				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.status").value("ACTIVE"));
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.message").value("Unsupported payment method: BITCOIN"));
 	}
 
-	private Long createCategory(String slug) throws Exception {
+	private Long createCategory() throws Exception {
 		MvcResult result = mockMvc.perform(post("/api/categories")
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("""
 								{
-								  "name": "Checkout Category",
-								  "slug": "%s"
+								  "name": "Payment Category",
+								  "slug": "pay-cat-%d"
 								}
-								""".formatted(slug + "-" + System.nanoTime())))
+								""".formatted(System.nanoTime())))
 				.andExpect(status().isCreated())
 				.andReturn();
 		return JsonPath.parse(result.getResponse().getContentAsString()).read("$.id", Long.class);
@@ -163,7 +147,7 @@ class CheckoutIntegrationTest {
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("""
 								{
-								  "name": "Checkout Product",
+								  "name": "Payment Product",
 								  "sku": "%s",
 								  "price": %.2f,
 								  "categoryId": %d
@@ -174,16 +158,15 @@ class CheckoutIntegrationTest {
 		return JsonPath.parse(result.getResponse().getContentAsString()).read("$.id", Long.class);
 	}
 
-	private Long createWarehouse(String code) throws Exception {
+	private Long createWarehouse() throws Exception {
 		MvcResult result = mockMvc.perform(post("/api/warehouses")
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("""
 								{
-								  "name": "Warehouse %s",
-								  "code": "%s",
-								  "location": "Test City"
+								  "name": "Payment WH",
+								  "code": "PWH-%d"
 								}
-								""".formatted(code, code + "-" + System.nanoTime())))
+								""".formatted(System.nanoTime())))
 				.andExpect(status().isCreated())
 				.andReturn();
 		return JsonPath.parse(result.getResponse().getContentAsString()).read("$.id", Long.class);

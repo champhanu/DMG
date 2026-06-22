@@ -41,7 +41,8 @@ Build an order management system with:
 | 10 | Cart keyed by `customerId` until Auth | Placeholder until User entity + security principal in Step 3 | ✅ Cart step |
 | 11 | Unit price snapshotted on add/update | Keeps cart total stable if catalog price changes before checkout | ✅ Cart step |
 | 12 | Flat 10% tax at checkout | Discounts module can replace later | ✅ Checkout |
-| 13 | Payment gateway stubbed | Simulates success/failure; no external PSP | ✅ Checkout |
+| 13 | Payment gateway stubbed via `PaymentGateway` interface | Swappable for real PSP later; no external calls now | ✅ Payment |
+| 14 | Refunds support partial and full | `PARTIALLY_REFUNDED` / `REFUNDED` statuses | ✅ Payment |
 
 ---
 
@@ -58,9 +59,10 @@ Development proceeds **one module at a time**. Each step = one focused commit + 
 | 4 | **Inventory** | Warehouses, stock levels, concurrent reservation | ✅ Done (with checkout) |
 | 5 | **Cart** | Add/update/remove items, cart persistence | ✅ Done |
 | 6 | **Checkout & Orders** | Atomic placement, payment, order APIs | ✅ Done |
-| 7 | **Discounts & Tax** | Promo codes, configurable tax | 🔲 Pending |
+| 7 | **Payments** | Gateway, payment APIs, refunds | ✅ Done |
+| 8 | **Discounts & Tax** | Promo codes, configurable tax | 🔲 Pending |
 | 8 | **Fulfillment** | Warehouse routing, staff status updates | 🔲 Pending |
-| 9 | **Returns & Refunds** | Return requests, refund processing | 🔲 Pending |
+| 9 | **Returns & Refunds** | Return requests linked to payment refunds | 🔲 Pending |
 | 10 | **Auth & RBAC** | Users, roles, secure APIs | 🔲 Pending |
 | 11 | **Tests** | Unit + integration tests for core flows | 🔲 Ongoing |
 
@@ -242,6 +244,37 @@ Order lifecycle: `PLACED → CONFIRMED → PACKED → SHIPPED → DELIVERED → 
 
 ---
 
+## Payment API
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/payments/{paymentId}` | Get payment by id |
+| `GET` | `/api/payments/order/{orderId}` | Get payment for an order |
+| `GET` | `/api/payments?customerId={id}` | List customer payments |
+| `POST` | `/api/payments/{paymentId}/refund` | Process full or partial refund |
+
+**Supported methods at checkout:** `CARD`, `UPI`, `WALLET`, `COD`
+
+**Payment statuses:** `PENDING`, `SUCCESS`, `FAILED`, `PARTIALLY_REFUNDED`, `REFUNDED`
+
+Checkout delegates to `PaymentService` + `StubPaymentGateway`. Failed payments return HTTP `402`.
+
+### Example: view payment after checkout
+
+```bash
+curl http://localhost:8080/api/payments/order/1
+```
+
+### Example: partial refund
+
+```bash
+curl -X POST http://localhost:8080/api/payments/1/refund \
+  -H "Content-Type: application/json" \
+  -d '{"amount":25.00,"reason":"Customer return"}'
+```
+
+---
+
 ## API Surface (planned — remaining modules)
 
 | Area | Endpoints (draft) | Role |
@@ -250,6 +283,7 @@ Order lifecycle: `PLACED → CONFIRMED → PACKED → SHIPPED → DELIVERED → 
 | Cart | *(implemented — see Cart API above)* | Customer |
 | Checkout | *(implemented — see Checkout API above)* | Customer |
 | Orders | *(read APIs implemented)* | Customer |
+| Payments | *(implemented — see Payment API above)* | Customer / Admin |
 | Fulfillment | `PATCH /api/orders/{id}/status` | Warehouse Staff |
 | Discounts | `POST/GET /api/discounts` | Admin |
 
@@ -308,6 +342,7 @@ Hibernate `ddl-auto: update` will create and update tables automatically as enti
 | 2026-06-22 | 2 — Catalog | `feat: catalog management with categories, products, and REST APIs` |
 | 2026-06-22 | 3 — Cart | `feat: customer cart with add, update, remove, and persistence` |
 | 2026-06-22 | 4 — Checkout | `feat: atomic checkout with inventory reservation, payment, and orders` |
+| 2026-06-22 | 5 — Payments | `feat: payment gateway, payment APIs, and refund processing` |
 
 ---
 

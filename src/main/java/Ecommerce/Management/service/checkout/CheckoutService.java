@@ -7,7 +7,6 @@ import Ecommerce.Management.domain.order.Order;
 import Ecommerce.Management.domain.order.OrderItem;
 import Ecommerce.Management.domain.order.OrderStatus;
 import Ecommerce.Management.domain.payment.Payment;
-import Ecommerce.Management.domain.payment.PaymentStatus;
 import Ecommerce.Management.dto.checkout.CheckoutItemResponse;
 import Ecommerce.Management.dto.checkout.CheckoutRequest;
 import Ecommerce.Management.dto.checkout.CheckoutResponse;
@@ -18,6 +17,7 @@ import Ecommerce.Management.repository.cart.CartRepository;
 import Ecommerce.Management.repository.order.OrderRepository;
 import Ecommerce.Management.service.inventory.InventoryService;
 import Ecommerce.Management.service.inventory.InventoryService.ReservationLine;
+import Ecommerce.Management.service.payment.PaymentService;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,7 +26,6 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 
 @Service
 public class CheckoutService {
@@ -36,16 +35,19 @@ public class CheckoutService {
 	private final CartRepository cartRepository;
 	private final OrderRepository orderRepository;
 	private final InventoryService inventoryService;
+	private final PaymentService paymentService;
 	private final ApplicationEventPublisher eventPublisher;
 
 	public CheckoutService(
 			CartRepository cartRepository,
 			OrderRepository orderRepository,
 			InventoryService inventoryService,
+			PaymentService paymentService,
 			ApplicationEventPublisher eventPublisher) {
 		this.cartRepository = cartRepository;
 		this.orderRepository = orderRepository;
 		this.inventoryService = inventoryService;
+		this.paymentService = paymentService;
 		this.eventPublisher = eventPublisher;
 	}
 
@@ -95,26 +97,17 @@ public class CheckoutService {
 		order.setTotalAmount(totalAmount);
 		orderItems.forEach(order::addItem);
 
-		Payment payment = new Payment();
-		payment.setAmount(totalAmount);
-		payment.setPaymentMethod(request.paymentMethod() == null || request.paymentMethod().isBlank()
-				? "CARD"
-				: request.paymentMethod());
-		payment.setStatus(PaymentStatus.PENDING);
-		order.setPayment(payment);
+		Payment payment = paymentService.processPaymentForOrder(
+				order,
+				request.paymentMethod(),
+				Boolean.TRUE.equals(request.simulatePaymentFailure()));
 
-		if (Boolean.TRUE.equals(request.simulatePaymentFailure())) {
-			payment.setStatus(PaymentStatus.FAILED);
-			throw new InvalidOperationException("Payment declined by gateway");
-		}
-
-		payment.setStatus(PaymentStatus.SUCCESS);
-		payment.setTransactionRef("TXN-" + UUID.randomUUID());
 		order.setStatus(OrderStatus.CONFIRMED);
 
 		Order savedOrder = orderRepository.save(order);
 		cart.setStatus(CartStatus.CHECKED_OUT);
 
+		paymentService.publishPaymentProcessed(savedOrder.getPayment());
 		eventPublisher.publishEvent(new OrderPlacedEvent(savedOrder.getId(), savedOrder.getCustomerId()));
 
 		return toCheckoutResponse(savedOrder);

@@ -1,6 +1,6 @@
 # AGENTS.md — AI-Assisted Development Guide
 
-**Current step:** Checkout complete — next: Fulfillment, Auth, or Discounts
+**Current step:** Payments complete — next: Fulfillment, Returns, or Auth
 
 ---
 
@@ -8,30 +8,26 @@
 
 | Item | Status |
 |------|--------|
-| Catalog APIs | ✅ |
-| Cart APIs | ✅ |
-| Inventory + reservation | ✅ |
-| Checkout (atomic) | ✅ |
-| Order read APIs | ✅ |
-| Async audit/notification on checkout | ✅ |
+| Catalog / Cart / Checkout | ✅ |
+| Inventory reservation | ✅ |
+| Payment gateway + APIs | ✅ |
+| Refunds (partial/full) | ✅ |
 | Fulfillment status updates | ❌ |
 | Auth / RBAC | ❌ |
 
 ---
 
-## Step — Checkout (completed)
+## Step — Payments (completed)
 
 **Built:**
-- `Warehouse`, `InventoryItem` with optimistic `@Version`
-- `Order`, `OrderItem`, `Payment` entities
-- Pessimistic inventory reservation across warehouses
-- `CheckoutService` — single `@Transactional` checkout
-- `POST /api/checkout`, `GET /api/orders`
-- `POST /api/warehouses`, `POST /api/inventory` (admin stocking)
-- `OrderPlacedEvent` + `@Async` listener (audit + notification logs)
-- `CheckoutIntegrationTest` (success, insufficient stock, payment rollback)
-
-**Tables:** `warehouses`, `inventory_items`, `orders`, `order_items`, `payments`
+- `PaymentMethod` enum: CARD, UPI, WALLET, COD
+- `PaymentStatus`: PENDING, SUCCESS, FAILED, PARTIALLY_REFUNDED, REFUNDED
+- `PaymentGateway` interface + `StubPaymentGateway`
+- `PaymentService` — charge at checkout, lookup, refund
+- `PaymentController` — `/api/payments` REST APIs
+- `PaymentProcessedEvent` + async audit listener
+- `PaymentFailedException` → HTTP 402
+- Checkout refactored to delegate payment to `PaymentService`
 
 ---
 
@@ -39,17 +35,13 @@
 
 | Date | Decision | Rationale |
 |------|----------|-----------|
-| 2026-06-22 | Greedy multi-warehouse allocation | Fulfills from highest-stock warehouse first |
-| 2026-06-22 | 10% flat tax at checkout | Placeholder until discounts/tax module |
-| 2026-06-22 | Payment stub with `simulatePaymentFailure` | Test rollback without external gateway |
-| 2026-06-22 | `@TransactionalEventListener(AFTER_COMMIT)` | Non-blocking pipeline without blocking checkout response |
+| 2026-06-22 | `PaymentGateway` interface | Easy to swap stub for Stripe/Razorpay later |
+| 2026-06-22 | Refund API on payment id | Decoupled from returns module; returns can call this later |
+| 2026-06-22 | 402 for payment failures | Distinguishes payment decline from generic 400 errors |
 
 ---
 
 ## Next Step
 
-- **Fulfillment:** `PATCH /api/orders/{id}/status` for warehouse staff
-- **Auth:** secure admin/customer endpoints
-- **Discounts:** replace flat tax, promo codes
-
-See [`skills/SKILLS.md`](skills/SKILLS.md).
+- **Fulfillment:** order status transitions by warehouse staff
+- **Returns:** link return requests to `POST /api/payments/{id}/refund`
