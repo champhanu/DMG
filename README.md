@@ -56,7 +56,7 @@ Development proceeds **one module at a time**. Each step = one focused commit + 
 | 1 | **Project foundation** | JPA, Security, Validation, MySQL config, health endpoint | ✅ Done |
 | 2 | **Catalog management** | Categories, products, admin CRUD, customer browse APIs | ✅ Done |
 | 3 | **Auth & RBAC** | Users, roles (ADMIN, CUSTOMER, WAREHOUSE_STAFF), secure APIs | 🔲 Pending |
-| 4 | **Inventory** | Warehouses, stock levels, concurrent reservation | ✅ Done (with checkout) |
+| 4 | **Inventory & Warehouses** | Multi-warehouse stock, admin APIs, concurrent reservation | ✅ Done |
 | 5 | **Cart** | Add/update/remove items, cart persistence | ✅ Done |
 | 6 | **Checkout & Orders** | Atomic placement, payment, order APIs | ✅ Done |
 | 7 | **Payments** | Gateway, payment APIs, refunds | ✅ Done |
@@ -177,7 +177,23 @@ MySQL tables `carts` and `cart_items` are created automatically on first app sta
 
 ---
 
-MySQL tables `carts` and `cart_items` are created automatically on first app start.
+## Warehouse API (admin)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/warehouses` | List warehouses (`?includeInactive=true` for admin) |
+| `GET` | `/api/warehouses/{id}` | Get warehouse by id |
+| `POST` | `/api/warehouses` | Create warehouse |
+| `PUT` | `/api/warehouses/{id}` | Update name/location |
+| `DELETE` | `/api/warehouses/{id}` | Soft-deactivate warehouse |
+
+### Example: create warehouse
+
+```bash
+curl -X POST http://localhost:8080/api/warehouses \
+  -H "Content-Type: application/json" \
+  -d '{"name":"East DC","code":"WH-EAST","location":"New York"}'
+```
 
 ---
 
@@ -185,10 +201,28 @@ MySQL tables `carts` and `cart_items` are created automatically on first app sta
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `POST` | `/api/warehouses` | Create warehouse |
-| `POST` | `/api/inventory` | Add stock for a product in a warehouse |
+| `GET` | `/api/inventory` | List stock (`?warehouseId=`, `?productId=`) |
+| `GET` | `/api/inventory/{id}` | Get inventory record |
+| `GET` | `/api/inventory/warehouse/{warehouseId}` | All stock at a warehouse |
+| `GET` | `/api/inventory/product/{productId}` | Stock across warehouses (totals + breakdown) |
+| `POST` | `/api/inventory` | Add stock (restock) |
+| `PATCH` | `/api/inventory/adjust` | Adjust available quantity by delta |
 
-Stock must exist before checkout. Inventory is reserved with pessimistic locking during checkout.
+Each record tracks `quantityAvailable`, `quantityReserved`, and `totalOnHand`.
+
+Checkout reserves stock with **pessimistic locking** — inactive warehouses are excluded from allocation.
+
+### Example: restock and view product stock
+
+```bash
+curl -X POST http://localhost:8080/api/inventory \
+  -H "Content-Type: application/json" \
+  -d '{"warehouseId":1,"productId":1,"quantity":100}'
+
+curl http://localhost:8080/api/inventory/product/1
+```
+
+MySQL tables `warehouses` and `inventory_items` are created automatically on first app start.
 
 ---
 
@@ -279,7 +313,7 @@ curl -X POST http://localhost:8080/api/payments/1/refund \
 
 | Area | Endpoints (draft) | Role |
 |------|-------------------|------|
-| Inventory | *(implemented — see Inventory API above)* | Admin |
+| Inventory | *(implemented — see Warehouse & Inventory APIs)* | Admin |
 | Cart | *(implemented — see Cart API above)* | Customer |
 | Checkout | *(implemented — see Checkout API above)* | Customer |
 | Orders | *(read APIs implemented)* | Customer |
@@ -343,6 +377,7 @@ Hibernate `ddl-auto: update` will create and update tables automatically as enti
 | 2026-06-22 | 3 — Cart | `feat: customer cart with add, update, remove, and persistence` |
 | 2026-06-22 | 4 — Checkout | `feat: atomic checkout with inventory reservation, payment, and orders` |
 | 2026-06-22 | 5 — Payments | `feat: payment gateway, payment APIs, and refund processing` |
+| 2026-06-22 | 6 — Inventory | `feat: warehouse and inventory management with multi-location stock APIs` |
 
 ---
 

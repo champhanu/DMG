@@ -3,10 +3,17 @@ package Ecommerce.Management.repository.inventory;
 import Ecommerce.Management.domain.inventory.Warehouse;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface WarehouseRepository extends JpaRepository<Warehouse, Long> {
 
 	Optional<Warehouse> findByCode(String code);
+
+	boolean existsByCodeAndIdNot(String code, Long id);
+
+	List<Warehouse> findByActiveTrueOrderByNameAsc();
+
+	List<Warehouse> findAllByOrderByNameAsc();
 
 }

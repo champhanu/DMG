@@ -1,6 +1,6 @@
 # AGENTS.md — AI-Assisted Development Guide
 
-**Current step:** Payments complete — next: Fulfillment, Returns, or Auth
+**Current step:** Inventory & Warehouses complete — next: Fulfillment, Returns, or Auth
 
 ---
 
@@ -8,26 +8,25 @@
 
 | Item | Status |
 |------|--------|
-| Catalog / Cart / Checkout | ✅ |
-| Inventory reservation | ✅ |
-| Payment gateway + APIs | ✅ |
-| Refunds (partial/full) | ✅ |
-| Fulfillment status updates | ❌ |
-| Auth / RBAC | ❌ |
+| Catalog / Cart / Checkout / Payments | ✅ |
+| Warehouses (full CRUD) | ✅ |
+| Inventory (stock, adjust, queries) | ✅ |
+| Pessimistic reservation at checkout | ✅ |
+| Fulfillment / Auth | ❌ |
 
 ---
 
-## Step — Payments (completed)
+## Step — Inventory & Warehouses (completed)
 
 **Built:**
-- `PaymentMethod` enum: CARD, UPI, WALLET, COD
-- `PaymentStatus`: PENDING, SUCCESS, FAILED, PARTIALLY_REFUNDED, REFUNDED
-- `PaymentGateway` interface + `StubPaymentGateway`
-- `PaymentService` — charge at checkout, lookup, refund
-- `PaymentController` — `/api/payments` REST APIs
-- `PaymentProcessedEvent` + async audit listener
-- `PaymentFailedException` → HTTP 402
-- Checkout refactored to delegate payment to `PaymentService`
+- `WarehouseService` — create, update, deactivate, list, get
+- `WarehouseController` — `/api/warehouses` REST APIs
+- `InventoryService` — stock, adjust, list, warehouse/product views, `reserveProduct` for checkout
+- `InventoryController` — `/api/inventory` REST APIs
+- `ProductStockResponse` — totals across active warehouses
+- `InventoryIntegrationTest`
+
+**Tables:** `warehouses`, `inventory_items` (with `@Version` for optimistic locking on entity)
 
 ---
 
@@ -35,13 +34,14 @@
 
 | Date | Decision | Rationale |
 |------|----------|-----------|
-| 2026-06-22 | `PaymentGateway` interface | Easy to swap stub for Stripe/Razorpay later |
-| 2026-06-22 | Refund API on payment id | Decoupled from returns module; returns can call this later |
-| 2026-06-22 | 402 for payment failures | Distinguishes payment decline from generic 400 errors |
+| 2026-06-22 | Split `WarehouseService` from `InventoryService` | Clear separation of warehouse vs stock concerns |
+| 2026-06-22 | Soft-deactivate warehouses | Inactive warehouses excluded from checkout allocation |
+| 2026-06-22 | `PATCH /api/inventory/adjust` with delta | Supports restock (+) and shrinkage (-) adjustments |
+| 2026-06-22 | Pessimistic lock on reserve | Prevents overselling under concurrent checkout |
 
 ---
 
 ## Next Step
 
-- **Fulfillment:** order status transitions by warehouse staff
-- **Returns:** link return requests to `POST /api/payments/{id}/refund`
+- **Fulfillment:** order status updates by warehouse staff
+- **Returns:** release reserved stock + trigger payment refund
