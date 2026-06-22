@@ -29,6 +29,9 @@ public class Order extends BaseEntity {
 	@Column(nullable = false, length = 20)
 	private OrderStatus status;
 
+	@Column(name = "status_reason", length = 500)
+	private String statusReason;
+
 	@Column(nullable = false, precision = 12, scale = 2)
 	private BigDecimal subtotal;
 
@@ -66,6 +69,14 @@ public class Order extends BaseEntity {
 
 	public void setStatus(OrderStatus status) {
 		this.status = status;
+	}
+
+	public String getStatusReason() {
+		return statusReason;
+	}
+
+	public void setStatusReason(String statusReason) {
+		this.statusReason = statusReason;
 	}
 
 	public BigDecimal getSubtotal() {

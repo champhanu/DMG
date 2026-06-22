@@ -91,7 +91,7 @@ public class CheckoutService {
 		Order order = new Order();
 		order.setCustomerId(request.customerId());
 		order.setCartId(cart.getId());
-		order.setStatus(OrderStatus.PLACED);
+		order.setStatus(OrderStatus.CREATED);
 		order.setSubtotal(subtotal);
 		order.setTaxAmount(taxAmount);
 		order.setTotalAmount(totalAmount);

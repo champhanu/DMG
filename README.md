@@ -15,7 +15,7 @@ Build an order management system with:
 - Customer cart and checkout
 - Inventory across multiple warehouses with **concurrent-safe reservation** (no overselling)
 - Payment processing
-- Order lifecycle: `PLACED → CONFIRMED → PACKED → SHIPPED → DELIVERED → RETURNED`
+- Order lifecycle: `CREATED → CONFIRMED → PACKED → DELIVERED` with `RETURNED` (from delivered) and `CANCELLED` (from created, confirmed, or packed)
 - Atomic order placement (cart + inventory + payment in one transaction)
 - Non-blocking downstream pipeline (fulfillment routing, notifications, audit logging)
 - Discounts, taxes, returns, and refunds

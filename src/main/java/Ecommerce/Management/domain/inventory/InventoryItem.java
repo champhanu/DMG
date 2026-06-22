@@ -74,4 +74,12 @@ public class InventoryItem extends BaseEntity {
 		quantityReserved += quantity;
 	}
 
+	public void release(int quantity) {
+		if (quantityReserved < quantity) {
+			throw new IllegalStateException("Cannot release more than reserved in warehouse " + warehouse.getCode());
+		}
+		quantityReserved -= quantity;
+		quantityAvailable += quantity;
+	}
+
 }

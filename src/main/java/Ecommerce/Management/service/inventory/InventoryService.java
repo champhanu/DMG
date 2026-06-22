@@ -1,6 +1,8 @@
 package Ecommerce.Management.service.inventory;
 
 import Ecommerce.Management.domain.catalog.Product;
+import Ecommerce.Management.domain.order.Order;
+import Ecommerce.Management.domain.order.OrderItem;
 import Ecommerce.Management.domain.inventory.InventoryItem;
 import Ecommerce.Management.domain.inventory.Warehouse;
 import Ecommerce.Management.dto.inventory.InventoryAdjustRequest;
@@ -125,6 +127,19 @@ public class InventoryService {
 					"Insufficient inventory for product " + productId + ". Short by " + remaining);
 		}
 		return reservations;
+	}
+
+	public void releaseOrderReservations(Order order) {
+		for (OrderItem item : order.getItems()) {
+			releaseReservation(item.getWarehouseId(), item.getProductId(), item.getQuantity());
+		}
+	}
+
+	public void releaseReservation(Long warehouseId, Long productId, int quantity) {
+		InventoryItem stock = inventoryItemRepository.findByWarehouseIdAndProductId(warehouseId, productId)
+				.orElseThrow(() -> new ResourceNotFoundException(
+						"No inventory for product " + productId + " in warehouse " + warehouseId));
+		stock.release(quantity);
 	}
 
 	private InventoryItem getOrCreateInventoryItem(Warehouse warehouse, Product product) {

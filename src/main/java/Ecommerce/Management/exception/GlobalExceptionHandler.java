@@ -27,6 +27,13 @@ public class GlobalExceptionHandler {
 				.body(ApiError.of(402, "Payment Required", ex.getMessage(), request.getRequestURI()));
 	}
 
+	@ExceptionHandler(InvalidOrderStateTransitionException.class)
+	public ResponseEntity<ApiError> handleInvalidTransition(
+			InvalidOrderStateTransitionException ex, HttpServletRequest request) {
+		return ResponseEntity.status(HttpStatus.CONFLICT)
+				.body(ApiError.of(409, "Conflict", ex.getMessage(), request.getRequestURI()));
+	}
+
 	@ExceptionHandler(ResourceNotFoundException.class)
 	public ResponseEntity<ApiError> handleNotFound(ResourceNotFoundException ex, HttpServletRequest request) {
 		return ResponseEntity.status(HttpStatus.NOT_FOUND)

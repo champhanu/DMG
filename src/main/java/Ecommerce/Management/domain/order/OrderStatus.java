@@ -1,10 +1,9 @@
 package Ecommerce.Management.domain.order;
 
 public enum OrderStatus {
-	PLACED,
+	CREATED,
 	CONFIRMED,
 	PACKED,
-	SHIPPED,
 	DELIVERED,
 	RETURNED,
 	CANCELLED
