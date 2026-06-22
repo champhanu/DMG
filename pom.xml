@@ -12,7 +12,7 @@
 	<artifactId>DMG</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
 	<name>DMG</name>
-	<description/>
+	<description>E-commerce Order Management System — multi-warehouse inventory, checkout, and fulfillment</description>
 	<url/>
 	<licenses>
 		<license/>
