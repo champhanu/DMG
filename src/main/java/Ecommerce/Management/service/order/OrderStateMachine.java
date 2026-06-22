@@ -12,7 +12,8 @@ public final class OrderStateMachine {
 	private static final Map<OrderStatus, Set<OrderStatus>> ALLOWED = Map.of(
 			OrderStatus.CREATED, EnumSet.of(OrderStatus.CONFIRMED, OrderStatus.CANCELLED),
 			OrderStatus.CONFIRMED, EnumSet.of(OrderStatus.PACKED, OrderStatus.CANCELLED),
-			OrderStatus.PACKED, EnumSet.of(OrderStatus.DELIVERED),
+			OrderStatus.PACKED, EnumSet.of(OrderStatus.SHIPPED),
+			OrderStatus.SHIPPED, EnumSet.of(OrderStatus.DELIVERED),
 			OrderStatus.DELIVERED, EnumSet.of(OrderStatus.RETURNED),
 			OrderStatus.RETURNED, EnumSet.noneOf(OrderStatus.class),
 			OrderStatus.CANCELLED, EnumSet.noneOf(OrderStatus.class));

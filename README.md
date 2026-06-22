@@ -15,7 +15,7 @@ Build an order management system with:
 - Customer cart and checkout
 - Inventory across multiple warehouses with **concurrent-safe reservation** (no overselling)
 - Payment processing
-- Order lifecycle: `CREATED → CONFIRMED → PACKED → DELIVERED` with `RETURNED` (from delivered) and `CANCELLED` (from created or confirmed only)
+- Order lifecycle: `CREATED → CONFIRMED → PACKED → SHIPPED → DELIVERED` with `RETURNED` (from delivered) and `CANCELLED` (from created or confirmed only)
 - Atomic order placement (cart + inventory + payment in one transaction)
 - Non-blocking downstream pipeline (fulfillment routing, notifications, audit logging)
 - Discounts, taxes, returns, and refunds
@@ -282,12 +282,12 @@ curl -X POST http://localhost:8080/api/checkout \
 ### Order lifecycle
 
 ```
-CREATED → CONFIRMED → PACKED → DELIVERED → RETURNED
+CREATED → CONFIRMED → PACKED → SHIPPED → DELIVERED → RETURNED
    ↓          ↓
 CANCELLED  CANCELLED
 ```
 
-- Cancellation is **not** allowed once the order reaches `PACKED`, `DELIVERED`, or `RETURNED`.
+- Cancellation is **not** allowed once the order reaches `PACKED`, `SHIPPED`, `DELIVERED`, or `RETURNED`.
 - Concurrent cancel vs pack on a `CONFIRMED` order uses optimistic locking (`@Version`); the loser gets HTTP `409 Conflict`.
 - Cancel restores reserved stock to `quantityAvailable`.
 - Return issues a full refund via the payment service.
@@ -299,6 +299,10 @@ CANCELLED  CANCELLED
 curl -X PATCH http://localhost:8080/api/orders/1/status \
   -H "Content-Type: application/json" \
   -d '{"status":"PACKED"}'
+
+curl -X PATCH http://localhost:8080/api/orders/1/status \
+  -H "Content-Type: application/json" \
+  -d '{"status":"SHIPPED"}'
 
 curl -X PATCH http://localhost:8080/api/orders/1/status \
   -H "Content-Type: application/json" \

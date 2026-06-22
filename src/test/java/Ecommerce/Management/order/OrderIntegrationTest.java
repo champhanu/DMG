@@ -46,7 +46,16 @@ class OrderIntegrationTest {
 								{ "status": "PACKED" }
 								"""))
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.status").value("PACKED"));
+				.andExpect(jsonPath("$.status").value("PACKED"))
+				.andExpect(jsonPath("$.allowedNextStatuses", containsInAnyOrder("SHIPPED")));
+
+		mockMvc.perform(patch("/api/orders/" + orderId + "/status")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("""
+								{ "status": "SHIPPED" }
+								"""))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.status").value("SHIPPED"));
 
 		mockMvc.perform(patch("/api/orders/" + orderId + "/status")
 						.contentType(MediaType.APPLICATION_JSON)
