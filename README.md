@@ -3,7 +3,7 @@
 Spring Boot REST API for multi-warehouse e-commerce order management at scale.
 
 **Repository:** https://github.com/champhanu/DMG  
-**Stack:** Java 21 · Spring Boot 4.1 · (database TBD — step 2)
+**Stack:** Java 21 · Spring Boot 4.1 · MySQL (local) · H2 (tests)
 
 ---
 
@@ -32,7 +32,7 @@ Build an order management system with:
 | 1 | Monolithic Spring Boot app (no microservices) | Per assignment out-of-scope | ✅ Locked |
 | 2 | No UI / frontend | Per assignment out-of-scope | ✅ Locked |
 | 3 | Basic RBAC via Spring Security (no OAuth/SSO/MFA) | Per assignment scope | 🔲 Step 3 |
-| 4 | Database choice TBD | To be decided in persistence module | 🔲 Step 2 |
+| 4 | MySQL locally, Hibernate `ddl-auto: update` | Tables auto-created/updated on app start; no Flyway yet | ✅ Step 1 |
 | 5 | Async pipeline via Spring `@Async` + application events | Avoids blocking checkout without distributed infra | 🔲 Step 8 |
 | 6 | Inventory reservation uses pessimistic locking / DB constraints | Prevents overselling under concurrency | 🔲 Step 5 |
 
@@ -44,9 +44,9 @@ Development proceeds **one module at a time**. Each step = one focused commit + 
 
 | Step | Module | Description | Status |
 |------|--------|-------------|--------|
-| 0 | **Skeleton** | README, AGENTS.md, package layout, skills docs | 🚧 In progress |
-| 1 | **Project foundation** | Dependencies (JPA, Security, Validation, Testcontainers), config | 🔲 Pending |
-| 2 | **Persistence** | Entities, repositories, DB schema, migrations | 🔲 Pending |
+| 0 | **Skeleton** | README, AGENTS.md, package layout, skills docs | ✅ Done |
+| 1 | **Project foundation** | JPA, Security, Validation, MySQL config, health endpoint | ✅ Done |
+| 2 | **Persistence** | Entities, repositories, DB schema | 🔲 Pending |
 | 3 | **Auth & RBAC** | Users, roles (ADMIN, CUSTOMER, WAREHOUSE_STAFF), basic security | 🔲 Pending |
 | 4 | **Catalog** | Products, categories — admin CRUD, customer browse | 🔲 Pending |
 | 5 | **Inventory** | Warehouses, stock levels, concurrent reservation | 🔲 Pending |
@@ -93,11 +93,37 @@ src/main/java/Ecommerce/Management/
 
 ## How to Run
 
+### 1. Start MySQL and create the database (one time)
+
+```bash
+mysql -u root -p < sql/init.sql
+```
+
+Or let Spring auto-create it via the JDBC URL (`createDatabaseIfNotExist=true`).
+
+### 2. Set your MySQL password locally
+
+```bash
+cp src/main/resources/application-local.yml.example src/main/resources/application-local.yml
+# Edit application-local.yml with your MySQL root password
+```
+
+Or use environment variables:
+
+```bash
+export DMG_DB_USERNAME=root
+export DMG_DB_PASSWORD=your-password
+```
+
+### 3. Start the app
+
 ```bash
 ./mvnw spring-boot:run
 ```
 
-*(Database and env config will be added in Step 1.)*
+Health check: http://localhost:8080/actuator/health
+
+Hibernate `ddl-auto: update` will create and update tables automatically as entities are added.
 
 ---
 
@@ -114,6 +140,7 @@ src/main/java/Ecommerce/Management/
 | Date | Step | Commit message |
 |------|------|----------------|
 | 2026-06-22 | 0 — Skeleton | `docs: project skeleton with README, AGENTS.md, and module roadmap` |
+| 2026-06-22 | 1 — Foundation | `feat: project foundation with MySQL, JPA, security, and health endpoint` |
 
 ---
 
