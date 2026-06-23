@@ -17,6 +17,7 @@ This project was built using **spec-driven development**: requirements are writt
 | **[AGENTS.md](AGENTS.md)** | Agent & contributor guide — current state, decisions log, workflow |
 | **[CLAUDE.md](CLAUDE.md)** | Quick entry point for AI coding assistants |
 | **[skills/SKILLS.md](skills/SKILLS.md)** | AI tools and skills used during development |
+| **[futurescope.md](futurescope.md)** | Future scale roadmap (cache, search, event-driven payments) |
 
 **Workflow:** Requirements → assumptions & decisions → implementation → tests → spec update → commit (one module at a time).
 

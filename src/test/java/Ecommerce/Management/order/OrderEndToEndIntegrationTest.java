@@ -8,7 +8,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
-import org.springframework.test.web.servlet.MvcResult;
 
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.hasSize;
@@ -175,6 +174,109 @@ class OrderEndToEndIntegrationTest {
 				.andExpect(jsonPath("$[0].warehouseId").value(warehouseId))
 				.andExpect(jsonPath("$[0].productId").value(productId))
 				.andExpect(jsonPath("$[0].quantity").value(2));
+	}
+
+	@Test
+	void fullOrderJourneyThroughDeliveredThenReturnAndRefund() throws Exception {
+		long customerId = 8101L;
+		Long categoryId = createCategory("e2e-return", "E2E Return Category");
+		Long productId = createProduct(categoryId, "E2E-RETURN-001", "E2E Returnable Headphones", 149.99);
+		Long warehouseId = createWarehouse("WH-E2E-RETURN", "E2E Return DC");
+		stockInventory(warehouseId, productId, 10);
+
+		mockMvc.perform(post("/api/cart/items")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("""
+								{
+								  "customerId": %d,
+								  "productId": %d,
+								  "quantity": 2
+								}
+								""".formatted(customerId, productId)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.subtotal").value(299.98));
+
+		MvcResult checkoutResult = mockMvc.perform(post("/api/checkout")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("""
+								{
+								  "customerId": %d,
+								  "paymentMethod": "CARD"
+								}
+								""".formatted(customerId)))
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.status").value("CONFIRMED"))
+				.andExpect(jsonPath("$.paymentStatus").value("SUCCESS"))
+				.andExpect(jsonPath("$.subtotal").value(299.98))
+				.andExpect(jsonPath("$.taxAmount").value(30.00))
+				.andExpect(jsonPath("$.totalAmount").value(329.98))
+				.andReturn();
+
+		Long orderId = JsonPath.parse(checkoutResult.getResponse().getContentAsString())
+				.read("$.orderId", Long.class);
+
+		mockMvc.perform(get("/api/inventory/product/" + productId))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.totalReserved").value(2))
+				.andExpect(jsonPath("$.totalAvailable").value(8));
+
+		awaitFulfillmentTasks(orderId);
+
+		mockMvc.perform(patch("/api/orders/" + orderId + "/status")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("""
+								{ "status": "PACKED" }
+								"""))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.status").value("PACKED"));
+
+		mockMvc.perform(patch("/api/orders/" + orderId + "/status")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("""
+								{ "status": "SHIPPED" }
+								"""))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.status").value("SHIPPED"));
+
+		mockMvc.perform(patch("/api/orders/" + orderId + "/status")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("""
+								{ "status": "DELIVERED" }
+								"""))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.status").value("DELIVERED"))
+				.andExpect(jsonPath("$.allowedNextStatuses", containsInAnyOrder("RETURNED")));
+
+		mockMvc.perform(post("/api/orders/" + orderId + "/return")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("""
+								{
+								  "customerId": %d,
+								  "reason": "Defective product - E2E return"
+								}
+								""".formatted(customerId)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.status").value("RETURNED"))
+				.andExpect(jsonPath("$.statusReason").value("Defective product - E2E return"))
+				.andExpect(jsonPath("$.paymentStatus").value("REFUNDED"))
+				.andExpect(jsonPath("$.totalAmount").value(329.98))
+				.andExpect(jsonPath("$.allowedNextStatuses", hasSize(0)));
+
+		mockMvc.perform(get("/api/orders/" + orderId))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.status").value("RETURNED"))
+				.andExpect(jsonPath("$.paymentStatus").value("REFUNDED"));
+
+		mockMvc.perform(get("/api/payments/order/" + orderId))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.status").value("REFUNDED"))
+				.andExpect(jsonPath("$.amount").value(329.98))
+				.andExpect(jsonPath("$.refundedAmount").value(329.98));
+
+		mockMvc.perform(get("/api/inventory/product/" + productId))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.totalReserved").value(0))
+				.andExpect(jsonPath("$.totalAvailable").value(10));
 	}
 
 	private void awaitFulfillmentTasks(Long orderId) throws Exception {
