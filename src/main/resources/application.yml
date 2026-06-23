@@ -5,8 +5,8 @@ spring:
     import: optional:classpath:application-local.yml
   datasource:
     url: jdbc:mysql://localhost:3306/dmg?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
-    username: ${DMG_DB_USERNAME:root}
-    password: ${DMG_DB_PASSWORD:}
+    username: root
+    password: Du5hyant@123
     driver-class-name: com.mysql.cj.jdbc.Driver
   jpa:
     hibernate:

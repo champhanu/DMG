@@ -7,6 +7,21 @@ Spring Boot REST API for multi-warehouse e-commerce order management at scale.
 
 ---
 
+## Spec-Driven Development
+
+This project was built using **spec-driven development**: requirements are written down first, then implemented and tested against that spec.
+
+| Document | Purpose |
+|----------|---------|
+| **[README.md](README.md)** (this file) | **Master spec** — requirements, assumptions, APIs, roadmap |
+| **[AGENTS.md](AGENTS.md)** | Agent & contributor guide — current state, decisions log, workflow |
+| **[CLAUDE.md](CLAUDE.md)** | Quick entry point for AI coding assistants |
+| **[skills/SKILLS.md](skills/SKILLS.md)** | AI tools and skills used during development |
+
+**Workflow:** Requirements → assumptions & decisions → implementation → tests → spec update → commit (one module at a time).
+
+---
+
 ## Problem Statement
 
 Build an order management system with:
