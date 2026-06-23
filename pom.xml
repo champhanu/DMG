@@ -79,7 +79,7 @@
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
 				<configuration>
-					<mainClass>Ecommerce.Management.main</mainClass>
+					<mainClass>Ecommerce.Management.DmgApplication</mainClass>
 				</configuration>
 			</plugin>
 		</plugins>
